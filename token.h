@@ -1,0 +1,100 @@
+#pragma once
+
+/* Lookup table of current language reserved keywords. */
+constexpr size_t reserved_keywords = 1;
+
+constexpr uint32_t KEYWORD_PROG_END = 0;
+
+constexpr std::array<const char*, reserved_keywords>
+reserved_keyword_strings = {
+    "PROG_END"
+};
+
+/* Lookup table of current token types accepted in the language. */
+
+constexpr size_t token_types_lookuptable_size = 7;
+
+constexpr uint32_t TOKEN_TYPE_IDENTIFIER  = 0;
+constexpr uint32_t TOKEN_TYPE_KEYWORD     = 1;
+constexpr uint32_t TOKEN_TYPE_OPEN_PAREN  = 2;
+constexpr uint32_t TOKEN_TYPE_CLOSE_PAREN = 3;
+constexpr uint32_t TOKEN_TYPE_OPERATOR    = 4;
+constexpr uint32_t TOKEN_TYPE_SEMICOLON   = 5;
+constexpr uint32_t TOKEN_TYPE_NUM_LITERAL = 6;
+
+constexpr std::array<const char*, token_types_lookuptable_size>
+token_type_strings = {
+    "Identifier",
+    "Keyword",
+    "Open Parenthesis",
+    "Close Parenthesis",
+    "Operator",
+    "Semicolon",
+    "Number Literal"
+};
+
+/* Placed the string_view object first, to avoid a padding of empty bytes
+ * if it's declared after 2nd or 3rd member. The only other optimal place to
+ * have it would be last, after 8+4+4 bytes. The two padding rules are:
+ *
+ *  - Total object size is padded with empty bytes until it's divisible
+ *    by the largest member's size.
+ *
+ *  - Each member must start at an offset within the object that's divisible
+ *    by that member's own size in bytes.
+ *
+ * That's why placing string_view first or last are the only two choices
+ * that avoid padding.
+ *
+ * For singlethreaded operation, other objects residing in the same cache
+ * line WILL NOT have to be re-read after an instruction from that same
+ * thread updates one of the objects in that cache line. So keep as many
+ * as possible on one cache line.
+ *
+ * Only for multithreading, this becomes an issue called False Sharing.
+ * If another thread needs another object on that same cache line, the
+ * entire line has to be written out to RAM and brought back into the cache
+ * of the CPU that needs the other object from that cache line. This would
+ * become a performance killer, so watch out.
+ */
+class Token {
+private:
+
+    std::string_view  token_value;
+    uint64_t          token_line_in_src;
+    uint32_t          token_col_in_src;
+    uint32_t          token_type_ix;
+
+public:
+
+    Token (std::string_view value_text, uint64_t line_in_src,
+           uint32_t col_in_src,         uint32_t type_index)
+
+        :  token_value(value_text),      token_line_in_src(line_in_src),
+           token_col_in_src(col_in_src), token_type_ix(type_index)
+    {
+        /* Handle error case: an invalid type index was somehow passed. */
+        if(type_index >= token_types_lookuptable_size)
+        [[unlikely]]
+        {
+            std::cout << "CRITICAL: Internal compiler error. [LEXER]\n";
+            std::cout << "Token constructor: Passed token type index "
+                << type_index << "\n";
+            std::cout << "Available type indices: 0 to "
+                << token_types_lookuptable_size - 1 << "\n";
+            std::cout << "Aborting compilation.\n";
+            std::abort();
+        }
+    }
+
+    void Print_Token_Info(void) const
+    {
+        std::cout << "---------------------------------\n";
+        std::cout << "Token type  : " << token_type_strings[token_type_ix]
+            << "\n";
+        std::cout << "Token value : " << token_value << "\n";
+        std::cout << "At src line : " << token_line_in_src + 1
+             << ":" << token_col_in_src + 1 << "\n";
+        std::cout << "---------------------------------\n";
+    }
+};
