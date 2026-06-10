@@ -226,21 +226,24 @@ GRAMMAR: in Extended BNF form:
 ------------------------------------------------------------
 
 Program
-    ::= Statement* ReturnStatement EOF
+    ::= Statement* "PROG_END"
 
 Statement
     ::= AssignmentStatement
 
+ProgEndStatement
+    ::= "PROG_END"
+
 AssignmentStatement
     ::= IDENTIFIER "=" Expression ";"
-
-ReturnStatement
-    ::= "return" Expression ";"
 
 Expression
     ::= INT_LITERAL
      |  IDENTIFIER
-     |  "(" Expression Operator Expression ")"
+     |  BinaryOperation
+
+BinaryOperation
+    ::= "(" Expression BinaryOperator Expression ")"
 
 Operator
     ::= "+"
@@ -248,15 +251,19 @@ Operator
      |  "*"
      |  "/"
 
-IDENTIFIER ::= [a-zA-Z_][a-zA-Z0-9_]*
+IDENTIFIER ::= [a-zA-Z_]+
 
 INT_LITERAL ::= [0-9]+
 ------------------------------------------------------------
 
+SYNTAX RULES:
+
+0. Each binary expression must be surrounded by parentheses. This defines
+   the order in which operations are computed, no operator precedence confusion.
+
 SEMANTIC RULES:
 ------------------------------------------------------------
-
-Rule 1: Variables must be declared before use.
+Rule 1: Variables must be assigned to before being read.
 
 Rule 2: There must be exactly one program-ending PROG_END statement.
 
