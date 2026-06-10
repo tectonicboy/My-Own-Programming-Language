@@ -16,7 +16,7 @@ class Lexer
 {
 private:
 
-    uint64_t current_lexeme_len;
+    uint32_t current_lexeme_len;
 
 	/* Token type can be readily deduced from the first character of the lexeme.
 	 * If it's a digit, the token is an integer literal.
@@ -30,9 +30,9 @@ private:
      * is described by a non-overlapping set of characters. We know exactly
      * which characters can be right after the last character too.
      */
-    uint64_t current_token_type_ix;
-    uint64_t current_line_ix;
-    uint64_t current_col_ix;
+    uint32_t current_token_type_ix;
+    uint32_t current_line_ix;
+    uint32_t current_col_ix;
 
 
 public:
@@ -131,7 +131,7 @@ public:
             else if (isalpha(source_code[i]) || (source_code[i] == '_'))
             {
                 current_lexeme_len = 1;
-                for(auto j = i + 1; j < source_code_len; ++j){
+                for(size_t j = i + 1; j < source_code_len; ++j){
 
                     bool keyword_matched = 0;
 
@@ -141,7 +141,7 @@ public:
                         temp_identifier_view = std::string_view(
                             (const char*)&(source_code[i], current_lexeme_len));
 
-                        for(auto k = 0; k < reserved_keywords; ++k){
+                        for(size_t k = 0; k < reserved_keywords; ++k){
                             if(temp_identifier_view
                                 == reserved_keyword_strings[k])
                             {
@@ -171,7 +171,8 @@ public:
                     if(j == source_code_len - 1){
                         /* At this point, it must be PROG_END to be correct. */
                         temp_identifier_view = std::string_view(
-                            (const char*)&(source_code[i]), current_lexeme_len + 1);
+                            (const char*)&(source_code[i]),
+                            current_lexeme_len + 1);
 
                         if(temp_identifier_view
                             != reserved_keyword_strings[KEYWORD_PROG_END])
@@ -180,6 +181,7 @@ public:
                              "ERROR: Program end not found. Insert PROG_END.\n";
                             std::cout << "Last token seen in source code: "
                                       << temp_identifier_view << "\n";
+
                             std::abort();
                         }
 
@@ -209,19 +211,20 @@ public:
         }
 
         /* DEBUG ONLY. Print all collected tokens. */
-        std::cout << "Lexer finished! Printing collected program tokens:\n";
-        for(auto i = 0; i < collected_tokens.size(); ++i){
+        std::cout << "\nLexer finished! Printing collected program tokens:\n";
+        for(size_t i = 0; i < collected_tokens.size(); ++i){
             std::cout << "Printing token " << i << "\n";
             collected_tokens[i].Print_Token_Info();
         }
-        std::cout << "Total tokens: " << collected_tokens.size() << "\n";
+        std::cout << "\nTotal tokens: " << collected_tokens.size() << "\n\n";
 
         return collected_tokens;
-
     }
 };
 
-int main(){
+int main()
+{
+    struct timespec tv1, tv2;
 
     std::string first_program =
         "x = 5;\n"
@@ -234,6 +237,12 @@ int main(){
         << first_program << "\n\n";
 
     Lexer lexer1;
-    lexer1.Tokenize_Source_Code(first_program);
 
+    clock_gettime(CLOCK_MONOTONIC_RAW, &tv1);
+    lexer1.Tokenize_Source_Code(first_program);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &tv2);
+
+    std::cout << "Time taken: "
+              << ((tv2.tv_nsec - tv1.tv_nsec) / (double)1000.0)
+              << " microseconds.\n\n";
 }
