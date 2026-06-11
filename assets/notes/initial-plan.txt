@@ -1,165 +1,218 @@
-Building a compiler from scratch is hands-down one of the most rewarding and illuminating projects you can tackle in software engineering. It pulls back the curtain on how computers actually work.
+################################################################################
+################################################################################
 
-To keep this achievable, we are going to design a pipeline for a minimal low-level language. Let's assume it only supports integers, basic arithmetic, variable assignment, and a return statement (which we will translate into a Linux system exit code).
+Phase 1: Lexer
 
-Here is your architectural blueprint, broken down by pipeline stage.
+Takes the raw source code string and splits it up into tokens. Each token has
+a type and a value (the raw text), plus the row and column it appeared at.
 
+Tokens are separated by whitespaces (\n, " ", \t), that the Lexer ignores.
 
-================================================================================
+Gives a syntax error if it sees a character not part of the language. Each token
+type has its own non-overlapping set of accepted characters, for elegant lexing.
 
---------------------------------------------------------------------------------
+---------------------------------------
 
-Phase 0: The Core Data Structures
+Lexer input : The raw source code text.
 
-Before writing functions, you need to define the data structures that will pass
-through your pipeline.
+Lexer output: An array of Token objects. In their original source code order.
 
-Token:
+---------------------------------------
 
-A structural grouping of characters.
-Contains a Type (e.g., INT_LITERAL, IDENTIFIER, PLUS, ASSIGN, RETURN)
-     and a Value ("42", "x").
+Currently identified Token types:
 
-ASTNode (Abstract Syntax Tree Node):
+    Identifier       := [a-z, _, A-Z]+   (not matching any Keywords)
+    Keyword          := [PROG_END]
+    OpenParenthesis  := (
+    CloseParenthesis := )
+    BinaryOperator   := +, -, *, /
+    Semicolon        := ;
+    IntegerLiteral   := [0-9]+
 
-Represents the hierarchical structure of your code.
-Contains a NodeType (e.g., Program, BinaryOp, Assignment, Literal),
-an optional Value,
-and a list of child ASTNodes.
+---------------------------------------
 
-SymbolTable:
+C++ implementation & optimization notes:
 
-A map (dictionary) linking variable names (identifiers)
-to their memory locations (e.g., stack offsets like -8(%rbp)).
+Token value is a std::string_view into a section of the imported source code
+string, to avoid unnecessary heap allocations for more std::string objects,
+since they are read-only (sub)strings of an already-allocated string anyway.
 
---------------------------------------------------------------------------------
+std::vector.reserve() is used to pre-allocate ahead of time enough memory for a
+generous amount of Tokens, to avoid the hidden heap re-allocations of the
+default vector memory allocation scheme in the STL, which starts the vector out
+with memory for a very small number of elements and reallocates more memory
+and copies all existing elements into that new heap memory block whenever adding
+an element beyond the current last reserved slot. This can degrade performance.
+vector.reserve() gets rid of these hidden heap allocations for most programs.
 
-Phase 1: Lexical Analysis (The Lexer)
+std::vector.emplace_back() is used to construct the Token objects directly into
+memory slot for that vector element, which is more efficient than using
+vector.push_back() which copies an already-constructed object into the vector
+memory for that element.
 
-The lexer reads raw text and chops it into meaningful, categorized chunks.
+################################################################################
+################################################################################
 
-Function: lex(source_code: String)
+Phase 2: Parser
 
-Input: The raw string of your custom language's source code.
+The parser takes the flat array of Tokens and constructs a tree data structure
+representing the source code's structure, called an Abstract Syntax Tree (AST).
 
-Output / Purpose: Produces a List[Token]. It strips out whitespace and comments,
-                  leaving only the syntactic vocabulary.
+It reads the eBNF grammar rules and decides whether there's a syntax error based
+on these. It knows exactly what Token(s) it can expect next, based on where it's
+currently at in the Token array. Semantic Rules are checked by the Parser too.
 
-Algorithm: State Machine / Sliding Window.
+The Parser also creates the Symbol Table, which collects all used symbol names
+in one place. These are names of used variables and functions. This is used to
+make sure that used variables actually exist in the current scope at usage time.
+It is impossible to declare a variable without initializing it, so checking
+that it's present in the Symbol Table at usage time is enough for validation.
 
-1. Initialize a cursor at index 0 of the string.
-2. Loop through the string.
-3. If the current character is a letter, advance the cursor until a non-letter
-   is found, extract the substring, and emit an IDENTIFIER or KEYWORD token.
-4. If the current character is a digit, advance until a non-digit is found,
-   and emit an INT_LITERAL token.
-5. If it's a symbol (=, +, ;), emit the corresponding symbol token.
-6. Advance the cursor and repeat until the end of the file.
+When functions, and different scopes in general, get added, the design will
+necessitate having one Symbol Table per scope.
 
-Example tokens:
+---------------------------------------
 
-Token(Type=IDENTIFIER, Value="x")
-Token(Type=INT_LITERAL, Value="42")
-Token(Type=RETURN, Value="return")
+Parser input : Token array.
 
-The Exclusion Rule (identifiers cannot be language keywords ) is not part of
-Token, it is part of the lexing decision step. The lexer's CLASSIFICATION LOGIC
-has a step where it answers: Given a raw string, what token TYPE should it be?
+Parser output: 1) AST
+               2) Symbol Table
 
-So for example, not allowing an identifier to be the END_PROG keyword:
+---------------------------------------
 
-sequence of letters: "return"
-it fits in: [a-zA-Z_][a-zA-Z0-9_]*
-so the default assumption: type = IDENTIFIER
-but before finalizing the token:
-    if lexeme in KEYWORDS:
-        type = KEYWORD_TYPE
+Language Definition: The Language Grammar in Extended BNF form + Semantic rules.
+-------------------
 
-Lexer Rule Set:
-  decides Token.Type based on lexeme classification rules
+Language Grammar:
+----------------
 
---------------------------------------------------------------------------------
+Program ::= Statement+ "PROG_END"
 
-Phase 2: Syntax Analysis (The Parser)
+Statement ::= AssignmentStatement   (later: FunctionCallStatement, IF ELSE, etc)
 
-The parser takes the flat list of tokens and builds a tree that represents
-the grammatical logic of your code. It checks against the language definition.
+AssignmentStatement ::= IDENTIFIER "=" Expression ";"
 
-Function: parse(tokens: List[Token])
+Expression ::= INT_LITERAL | IDENTIFIER | BinaryOperation
 
-Input: The List[Token] generated by the Lexer.
+BinaryOperation ::= "(" Expression BinaryOperator Expression ")"
 
-Output / Purpose: Produces an ASTNode representing the Root or Program node
-                  of your Abstract Syntax Tree.
+BinaryOperator ::= "+" | "-" | "*" | "/"
 
-Algorithm: Recursive Descent Parsing.
+IDENTIFIER ::= [a-zA-Z_]+
 
-Maintain a pointer to the "current token".
+INT_LITERAL ::= [0-9]+
 
-Write a function for every grammatical rule in your language
-(e.g., parse_statement(), parse_expression(), parse_term()).
+Semantic Rules:
+--------------
 
-Start at parse_program(), which loops and calls parse_statement() until it
-hits an End-Of-File token.
+Rule 1: Each complex (sub)expression must be parenthesized. This gives the order
+        which operations are carried out, no implicit operator precedence.
 
-To parse_expression(), look for a literal or identifier. If a PLUS token
-follows, recursively call parse_expression() again and wrap them both in
-a BinaryOp AST node.
+Rule 2: Variables must be assigned to, before being read. No declarations
+        without initialization.
 
-Crucial: If the tokens don't match your expected grammar rules,
-         throw a "Syntax Error" and halt.
+Rule 3: "PROG_END" signifies the end of the program. Place at source code end.
 
---------------------------------------------------------------------------------
+Rule 4: Each statement ends with a semicolon.
 
-Phase 3: Semantic Analysis
+Rule 5: Unsigned 64-bit integer-only expressions & expression operands. Strings,
+        negative and floating point numbers don't exist yet. Functions and
+        control flow don't exist yet. Pointers don't exist yet. OS API calls
+        don't exist yet.
 
-For a minimal language, this step ensures variables are declared before they
-are used and maps them to stack memory.
+---------------------------------------
 
-Function: analyze_and_map(ast: ASTNode)
+Compiler optimizations done by walking the AST:
 
-Input: The root ASTNode.
+- Constant folding & propagation
+- Replacing multiply/divide by a power of 2 with bit shifting.
+- Replace multiply by 0 with 0.
+- Loop-invariant code motion
 
-Output / Purpose: Produces a SymbolTable that tracks the stack offset for
-                  every variable.
+---------------------------------------
 
-Algorithm: Depth-First Search (DFS) Tree Traversal.
+C++ implementation & optimization notes:
 
-Initialize an empty SymbolTable and current_stack_offset integer starting at 0.
+Each AST Node is an object. There are different classes for AST Node types.
+If an expression Node can contain multiple subexpressions (eg. BinaryOperation),
+the class simply contains pointers to Expression Node objects by definition,
+and they're set to whatever subexpressions appear in the source code during
+compilation. Again, these are precisely defined by the language grammar rules.
+Use regular pointers for now. Not using std::unique_ptr to avoid learning too
+much C++ too quickly and overstressing my learning experience with TMI. To
+store the AST itself, prefer a contiguous array of AST Node objects to improve
+cache locality, instead of heap-allocating each Node with a pointer to it. Each
+subexpression is strictly owned by whatever top-level expression contains it,
+so if the parent expression is deleted, it must also clean up all its children.
+This will be done via the destructors I suppose. std::unique_ptr can automate
+this cleanup, but again, avoiding them to not be overburdening myself with
+too much to learn, as I'm getting into C++ (from C) just now. If the AST Nodes
+are held in a flat array of Node objects, destructors don't need to run, the
+array is simply zerode out when cleanup is needed. This is elegant and ownership
+isn't a thing.
 
-Walk the AST recursively.
+The Symbol Table is stored in a std::unordered_map. We don't require any sorting
+in the table, like ascending or descending order, so we don't need std::map.
+The std::unordered_set and std::unordered_map are backed by a cache-friendly
+contiguous hash array. You can reserve a larger memory block for it just like
+with std::vector. Two different strings can lead to the same index via the hash
+function, this is handled by the STL internally in ways that are a mystery to me
+currently, but I assume pointer chaining or something of that nature. On the
+other hand, std::set and std::map are implemented by a self-balanced binary
+tree, where each tree node creation is a new heap allocation. Pointers get
+changed to automatically balance the binary tree when elements are inserted.
+Elements appear in ascending order by default always when iterating over the
+tree. This can be swapped out for descending order by passing a template
+parameter.
 
-When you encounter a variable declaration or assignment, check if it's in
-the SymbolTable.
+################################################################################
+################################################################################
 
-If it is new, subtract 8 from current_stack_offset
-(since x86_64 stack grows downwards and integers are 8 bytes)
-and map the variable name to this new offset.
+Phase 3: IR code generator
 
-If a variable is read (used in an expression) but isn't in the table,
-throw an "Undeclared Variable" error.
+Map variables to stack offsets and emit the IR code for the program. SSA form
+will be used for the IR. A lot of optimizations will become possible on it.
 
---------------------------------------------------------------------------------
+---------------------------------------
 
-Phase 4: Code Generation (The Emitter)
+IR Generator input : Root AST Node (Program node, with its Statement nodes).
 
-This is where the magic happens. You will translate your AST into a string
-of x86_64 assembly instructions.
+IR Generator output: IR code of the program, in Static Single Assignment form.
 
-Function: generate_assembly(ast: ASTNode, symbols: SymbolTable)
+---------------------------------------
 
-Input: The root ASTNode and the populated SymbolTable.
+Compiler optimizations on the IR:
 
-Output / Purpose: Produces a String containing valid x86_64 assembly code.
+    - Common subexpression elimination
+    - Auto-vectorization of loops
+    - Auto-vectorization of basic blocks
+    - Loop unrolling
+    - Scalar evolution
+    - Arithmetic operation reduction
+    - Dead code elimination
+    - Function inlining
 
-Algorithm: Post-Order AST Traversal (Stack Machine Model).
+---------------------------------------
 
-Emit Prelude: Start by outputting the .global _start directive,
-              the _start: label, and standard function prologue assembly code:
-              push rbp
-              mov rbp, rsp
+More to this section will be added when I get to implementing it.
 
-Traverse Statements: Iterate through the AST children.
+################################################################################
+################################################################################
+
+Phase 4: Assembly code generator
+
+This phase takes the IR code and emits corresponding assembly instructions for
+the target architecture. Could target ARM and x64.
+
+---------------------------------------
+
+Assembly prologue: Emit: the .global _start directive,
+                         the _start: label,
+                         and standard function prologue assembly code:
+                         push rbp
+                         mov rbp, rsp
+
+Traverse Statements: Walk the IR line by line and emit assembly instructions.
 
 Evaluate Expressions via Stack:
 
@@ -180,21 +233,35 @@ Variables: When assigning a variable, evaluate the right-hand expression
 
 Emit Epilogue / Linux Exit:
 
-When you hit the program's only return statement, put the return value in rdi
+When you hit the program's only PROG_END, put the return value in rdi
 (the exit code argument). Emit Linux syscall 60 (mov rax, 60, then syscall).
 Without this, the Linux kernel will try to continue executing memory past your
 program and throw a Segmentation Fault.
 
---------------------------------------------------------------------------------
+---------------------------------------
+
+Later when I introduce a register allocator, will use: Chaitin-Briggs Algorithm.
+This uses graph-coloring math to see when an available architectural register
+can be used, and when spilling is needed. People say it's pretty complicated
+and advanced, so I'm excited to get there.
+
+Compiler optimizations on the assembly code:
+
+Sliding window instruction elimination / replacing.
+
+More to this section will be added when I get to implementing it.
+
+################################################################################
+################################################################################
 
 Phase 5: Assembly & Linking
 
-Your compiler now outputs assembly code text. You need to automate turning
-that text into an ELF binary.
+The compiler now outputs assembly code text. This step turns that text into an
+ELF binary executable file.
 
 Function: build_executable(assembly_code: String, output_filename: String)
 
-Input: The raw assembly String and the desired name of the executable.
+Input: The raw assembly string and the desired name of the executable.
 
 Output / Purpose: Writes files to disk and triggers system build tools to
                   yield a runnable Linux binary.
@@ -203,263 +270,15 @@ Algorithm: File I/O and Subprocess Execution. Call assembler and linker.
 
 Write the assembly_code to a file named temp.asm.
 
-Execute an external process: nasm -f elf64 temp.asm -o temp.o
-This assembles your text into an object file.
+Execute the external process: nasm -f elf64 temp.asm -o temp.o
+This assembles the text into an ELF object file.
 
-Execute an external process: ld temp.o -o [output_filename]
-This links your object file into a final ELF executable.
+Execute the external process: ld temp.o -o [output_filename]
+This links the object file into a final ELF executable.
 
-Clean up (delete) temp.asm and temp.o.
+Delete the temporaries temp.asm and temp.o.
 
-This pipeline will successfully take a text file containing something like:
+More to this section will be added when I get to implementing it.
 
-x = 5;
-return x + 2;
-
-and turn it into a Linux binary that runs and exits with a status code of 7.
-
---------------------------------------------------------------------------------
-
-Language Definition: The Grammer + The set of Semantic Rules.
-
-GRAMMAR: in Extended BNF form:
-------------------------------------------------------------
-
-Program
-    ::= Statement* "PROG_END"
-
-Statement
-    ::= AssignmentStatement
-
-ProgEndStatement
-    ::= "PROG_END"
-
-AssignmentStatement
-    ::= IDENTIFIER "=" Expression ";"
-
-Expression
-    ::= INT_LITERAL
-     |  IDENTIFIER
-     |  BinaryOperation
-
-BinaryOperation
-    ::= "(" Expression BinaryOperator Expression ")"
-
-Operator
-    ::= "+"
-     |  "-"
-     |  "*"
-     |  "/"
-
-IDENTIFIER ::= [a-zA-Z_]+
-
-INT_LITERAL ::= [0-9]+
-------------------------------------------------------------
-
-SYNTAX RULES:
-
-0. Each binary expression must be surrounded by parentheses. This defines
-   the order in which operations are computed, no operator precedence confusion.
-
-SEMANTIC RULES:
-------------------------------------------------------------
-Rule 1: Variables must be assigned to before being read.
-
-Rule 2: There must be exactly one program-ending PROG_END statement.
-
-Rule 3: PROG_END must be the final statement in the program.
-
-Rule 4: Integer-only expressions & expression operands. Strings don't exist yet.
-
---------------------------------------------------------------------------------
-
-MINI ROADMAP:
-
-Mini compiler spec roadmap
-
-Phase 1 Lexer
-
-input is raw source code string
-output is ordered token stream
-Lexer ignores all whitespace. Whitespace characters are <SPACE>, <TAB>, \n.
-
-identifier symbols must be alphabetical, can have underscores too. No digits
-or other special characters. Just lower / upper case ASCII english letters
-and underscores.
-identifiers cannot be any of the language's reserved keywords BUT this can't
-be checked by the lexer. It is checked by the parser, which takes the token
-stream and produces an AST while checking the token groups against the defined
-language grammar.
-integer literals match [0-9]+ with no signs or decimal points.
-Currently the only keyword is PROG_END. Lexer doesn't care if it's present
-or if it's where it's supposed to be (very end of the program). Lexer simply
-parses source code strings and makes sure they are within the language.
-expression operators are single character tokens = + - * /
-semicolon is the single character token ;
-parentheses are single character tokens ( )
-
-Basically this reads the program and accepts all source code strings.
-Each token is either the first token, the PROG_END token at EOF,
-or a string in the source code surrounded by 1 or more whitespace
-characters (<SPACE>, <TAB>, <\n>).
-If the next token is a semicolon instead of a whitespace, that's okay,
-but a space must be placed after the semicolon.
-Parser categorizes the code strings and checks them against very basic rules:
-
-Each token must be exactly one of:
-        - An identifier
-        - An expression operator
-        - Parenthesis
-        - Semicolon
-        - A keyword
-
-So now the lexer algorithm is incredibly simple to describe.
-
-------------------------------------------------------------
-
-C++ features to use:
-
-std::string
-
-std::string_view
-
-std::vector, including preallocating to avoid its internal allocator w/ memmove
-this uses std::vector::reserve().
-
-isalpha() and isdigit()
-
-lexing as a member function of class Lexer:
-
-class Lexer {
-private:
-    std::string_view source;
-    size_t cursor = 0;
-    int line = 1;
-    int column = 1;
-
-public:
-
-    // Pass source code to the constructor to initialize the state.
-    //
-    // source_code is a std::string that came from the system reading
-    // the source code file's contents.
-    // A std::string_view does not copy anything. It is just a lightweight pair
-    // of a pointer and a length. It essentially says: "I point to the memory
-    // owned by that string over there."
-    // The Token struct can use std::string_view for its lexemes.
-    // The Token stores a std::string_view that says: "This token starts at
-    // pointer address 0x7fff in the file string, and is 20 characters long."
-    explicit Lexer(std::string_view source_code) : source(source_code) {}
-
-    // The member function doesn't need parameters anymore, it just runs!
-    std::vector<Token> tokenize();
-};
-
-------------------------------------------------------------
-IMPORTANT: A great pillar of OOP design - having the Lexer has a class allows
-           us to spin up multiple threads lexing different source files
-           extremely easily, because each thread gets its own Lexer object.
-           Each lexer object has well defined initialization and clean up
-           of ALL the state it needs, like current cursor, line and column,
-           current token type being constructed, etc. Instead of this state
-           being global. An object allows us, in this case, to elegantly
-           wrap all the state and functionality that a Lexer needs and have
-           multiple of them running at once in a multithreaded setup lexing
-           different source files, without worrying about race conditions.
-
-A token class and a vector<Token> will exist. At start, preallocate (reserve)
-enough space in the vector for 10,000 Token objects. Use tokens.emplace_back
-instead of push_back, as emplace_back constructs the Token object directly
-into the memory used for the vector of tokens, whereas push_back takes an
-already constructed Token object (presumably constructed right before the code
-that adds it to the vector) and COPIES it into the vector memory:
-
-/* Inside the Lexer class, the primary worker member function
-*  std::vector<Token> Lexer::tokenize() {
-*     ...
-*  }
-*  will contain it:
-*/
-
-/* Example: Found an Operator token. */
-/* OPERATOR_TOKEN_LENGTH is #defined to 1 here. */
-
-if (c == '+' || c == '-' || c == '*' || c == '/' || c == '=' ) {
-    size_t token_start = current_cursor_location;
-    /* Token length already known at it first character. Advance cursor by 1. */
-    current_cursor_location += OPERATOR_TOKEN_LENGTH;
-    tokens.emplace_back(
-                "OPERATOR",
-                source.substr(token_start, OPERATOR_TOKEN_LENGTH),
-                line,
-                column - 1
-    );
-------------------------------------------------------------
-
-
-ALGORITHM: Lexer consumes the source code string.
-
-1. If it's a Space, Tab, or Newline ( , \t, \n): Skip it and move on.
-
-2. If it's a Digit (0-9): Start consuming characters until you hit a non-digit.
-   Boom, you have an Integer Literal.
-
-3. If it's a Letter/Underscore (a-z, A-Z, _): Start consuming characters until
-   you hit a non-alphabetic/non-underscore one. Collect the string, and then:
-
-   3.1. Check if it equals a reserved keyword. If yes, it's a Keyword token.
-   3.2. Otherwise, it's an Identifier token.
-
-4. If it's =, +, -, * or /
-
-   Instantly turn it into its respective Operator token.
-
-5. If it's ;, (, or )
-
-   Instantly turn it into its respective Separator token.
-
-6. Anything else: Give a "Lexer Error: Unexpected character in source code".
-   Count the \n's seen so far so you can tell which line the character is on
-   and at what column.
-
-------------------------------------------------------------
-
-Phase 2 Parser
-
-input is token stream
-output is abstract syntax tree
-program is zero or more statements followed by exactly one return
-statement and EOF
-return statement must be the final statement in the program
-statements consist only of assignments before the return
-assignment is IDENTIFIER = expression ;
-left hand side must be a single identifier only
-return is return expression ;
-expression can be integer literal or identifier or parenthesized
-expression or binary expression
-binary expression is expression operator expression
-operators are + - * /
-parentheses override precedence
-syntax errors occur on unexpected tokens missing semicolons or
-invalid grammar structure
-implicit precedence is multiplication and division above addition
-and subtraction if implemented
-
-Phase 3 Semantic Analysis
-
-input is abstract syntax tree
-output is validated AST with symbol table
-variables must be defined before use
-first assignment defines a variable
-no redeclaration or shadowing allowed all variables are in a single
-global scope
-only 64 bit integers exist no other types exist
-expressions may only use integers defined variables operators + - *
-/ and parentheses
-exactly one return statement must exist and it must be the final
-statement
-return expression defines program exit value
-each variable is assigned a unique stack offset starting at -8 and
-decreasing by 8 per variable
-each variable occupies 8 bytes
-using an undefined variable causes a semantic error
+################################################################################
+################################################################################
