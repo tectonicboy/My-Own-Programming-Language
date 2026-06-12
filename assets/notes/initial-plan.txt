@@ -92,7 +92,7 @@ Statement ::= AssignmentStatement   (later: FunctionCallStatement, IF ELSE, etc)
 
 AssignmentStatement ::= IDENTIFIER "=" Expression ";"
 
-Expression ::= INT_LITERAL | IDENTIFIER | BinaryOperation
+Expression ::= UINT64_LITERAL | IDENTIFIER | BinaryOperation
 
 BinaryOperation ::= "(" Expression BinaryOperator Expression ")"
 

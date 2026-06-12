@@ -1,0 +1,147 @@
+*** WARNING: THESE NOTES ARE LLM-GENERATED! Edit later with human review. ***
+================================================================================
+
+The Chaitin-Briggs algorithm (also called optimistic graph coloring register allocation) is a widely used heuristic for global register allocation in compilers. It models the problem as graph coloring: nodes are live ranges (or temporaries/virtual registers), edges represent interferences (two values live at the same time cannot share a register), and colors are physical registers (k available registers).
+It improves on the original Chaitin algorithm with optimistic coloring (deferring spill decisions) and aggressive coalescing.
+High-Level Phases (Chaitin-Briggs)
+
+Build the interference graph.
+Coalesce (repeated with Build until fixed point): Remove unnecessary register-to-register moves.
+Calculate spill costs.
+Simplify + Select (the core coloring loop, optimistic).
+If spills occurred → insert spill code (loads/stores) and iterate the whole process.
+
+The algorithm may loop several times if spilling is needed.
+Detailed Steps for Implementation in C++
+You will need:
+
+Liveness analysis (dataflow) on your intermediate representation (IR) — this is a prerequisite, not part of the allocator itself.
+Representation of live ranges / temporaries.
+An interference graph (adjacency lists + possibly a bit matrix for speed).
+
+1. Build Interference Graph
+
+For each program point, compute the set of live variables (from liveness analysis).
+For every pair of simultaneously live temporaries → add an edge (interference).
+Also add interferences for machine-specific constraints (e.g., caller-saved registers, register classes).
+Nodes often represent "webs" (connected components of def-use chains for the same variable).
+
+Implementation notes: Use std::vector<std::unordered_set<int>> or std::vector<std::vector<int>> for adjacency lists. A std::vector<std::vector<bool>> bit matrix can help for fast checks.
+2. Coalesce (Aggressive Coalescing)
+
+Find register-to-register copy instructions (a = b).
+If a and b do not interfere (no edge between them), merge the nodes (coalesce them into one).
+Update the graph (union neighbors, remove self-loops).
+Repeat Build + Coalesce until no more coalesces possible (or use a conservative heuristic to avoid too many iterations).
+
+This is important for performance (removes moves) and targeting (e.g., putting arguments in specific registers).
+3. Calculate Spill Costs
+For each node n:
+
+Estimate the cost of spilling it to memory.
+Typical heuristic: cost = (uses + defs) * 10^loop_depth or similar weighted by execution frequency.
+Briggs often uses a combination of spill cost and current degree.
+
+Store this per node.
+4. Simplify + Select (Core Optimistic Coloring)
+This is the heart of the algorithm. Use a stack to order nodes.
+Simplify phase (build ordering by pruning):
+
+Repeatedly:
+While there exists a node with degree < k (trivially colorable):
+Remove it from the graph (and its edges).
+Push it onto a stack.
+
+If graph is not empty (all remaining nodes have degree ≥ k):
+Choose a spill candidate (lowest spill_cost / degree or similar heuristic).
+Remove it anyway and push onto the stack (this is the "optimistic" part — hope it gets a color later).
+
+
+Continue until the graph is empty. All nodes are now on the stack.
+
+Select phase (actual coloring, in reverse order):
+
+Pop nodes from the stack one by one.
+Re-insert the node into the (partially rebuilt) graph.
+Assign the lowest available color (register) not used by its current neighbors.
+If no color is available → mark this node for spilling (leave uncolored).
+
+If any nodes were marked for spilling:
+
+Insert spill code (store after defs, load before uses; possibly split live ranges).
+Restart the entire allocation process on the modified program.
+
+Pseudocode Sketch (based on standard descriptions)
+C++while (true) {  // Outer loop for spilling iterations
+    BuildInterferenceGraph();
+    Coalesce();  // repeat with build if needed
+
+    CalculateSpillCosts();
+
+    Stack orderingStack;
+    Graph workGraph = interferenceGraph;
+
+    // Simplify
+    while (!workGraph.empty()) {
+        bool progress = false;
+        while (Node n = findNodeWithDegreeLessThanK(workGraph, k)) {
+            orderingStack.push(n);
+            removeNodeAndEdges(workGraph, n);
+            progress = true;
+        }
+        if (!progress && !workGraph.empty()) {
+            Node spillCandidate = chooseSpillCandidate(workGraph);  // heuristic
+            orderingStack.push(spillCandidate);
+            removeNodeAndEdges(workGraph, spillCandidate);
+        }
+    }
+
+    // Select
+    std::vector<int> colors(numNodes, -1);  // -1 = uncolored/spill
+    Graph tempGraph;  // rebuild incrementally or from scratch
+
+    bool spilled = false;
+    while (!orderingStack.empty()) {
+        Node n = orderingStack.pop();
+        int forbiddenColors = getUsedColorsByNeighbors(tempGraph, n);
+        if (there is an available color c not in forbiddenColors) {
+            colors[n] = c;
+            addNodeWithColor(tempGraph, n, c);
+        } else {
+            colors[n] = -1;  // mark for spill
+            spilled = true;
+        }
+    }
+
+    if (!spilled) {
+        // Success! Assign physical registers according to colors.
+        break;
+    } else {
+        InsertSpillCodeForMarkedNodes();
+        // Optionally: live range splitting / rematerialization
+    }
+}
+Key Implementation Tips for C++
+
+Data structures:
+Nodes: map temporaries to indices (0..N-1).
+Degree tracking: maintain a degree array, update on removal.
+Use priority queues or buckets for efficiently finding low-degree nodes.
+For large graphs, optimize with adjacency lists + bitsets.
+
+Heuristics matter:
+Spill cost: loop depth weighting is crucial.
+When to spill: cost / degree (or cost / (degree+1) to avoid division by zero).
+
+Iterative spilling: Usually converges quickly, but limit iterations or use better live-range splitting to avoid code bloat.
+Edge cases: Pre-colored nodes (fixed registers), register classes (different k per class), rematerialization (cheaper than spilling some constants).
+Testing: Start with small examples (e.g., from compiler textbooks or LLVM test cases). Visualize graphs with Graphviz.
+
+Recommended Resources for Deeper Details / Code
+
+Briggs et al. paper: "Improvements to Graph Coloring Register Allocation" (the key reference).
+"Register Allocation by Graph Coloring" overview (lighterra.com).
+LLVM's implementation (search for RegAllocGreedy or older PBQP/Chaitin-style code) or open-source projects like the GitHub tgangwani/RegAlloc.
+Compiler textbooks (e.g., Muchnick's Advanced Compiler Design & Implementation).
+
+This should give you a solid foundation to implement it. Start with the core simplify/select loop on a pre-built graph, then add coalescing and spilling. Good luck — register allocation is tricky but very rewarding! If you have specific parts (e.g., graph representation or a particular heuristic), provide more details for targeted advice.

@@ -1,0 +1,110 @@
+################################################################################
+################################################################################
+
+Topic: Explicit constructors.
+
+Made with "explicit" keyword on the constructor definition.
+
+Explicit makes it so that you have to call it with curly braces or
+parentheses syntax, it forbids implicitly calling the constructor by
+writing its arguments where the object must be constructed in the code.
+
+Technically, it forbids copy-initialization and implicit conversions from
+constructor arguments if they are provided in place of a call to the
+constructor (in object initialization, passing one to a function, etc).
+
+Illustrated object construction with an explicit constructor:
+
+class_A a = 5; // BAD!
+class_A a(5);  // GOOD!
+class_A a{5};  // GOOD!
+
+//func() expects an object argument:
+x = func(5);         // BAD!
+x = func(class_A(5)) // GOOD!
+x = func(class_A{5}) // GOOD!
+
+real code example:
+
+    /* Constructor. */
+    explicit AST_Node_Statement_Assignment
+        (Symbol& lhs_name_input, AST_Node_Expression& rhs_expr_input)
+    : lhs_identifier(lhs_name_input), rhs_expression(rhs_expr_input)
+    {}
+
+################################################################################
+################################################################################
+
+Topic: Destructors.
+
+1. A default compiler-generated destructor of each class makes sure that:
+
+    - Object members have their destructor called, in reverse declaration order.
+    - STL container members (they're objects) have their destructors called too.
+
+   NOTE: Raw pointers to heap-allocated regions WILL NOT be auto cleaned up
+         when the destructor runs, I have to write the cleanup code for this
+         by myself in the destructor function body. This is because raw pointers
+         don't have memory ownership semantics, that's what smart ptrs are for.
+
+
+virtual ~AST_Node_Statement () = default;
+
+
+2. A virtual destructor is used in an abstract base class that can't itself have
+   objects, instead the objects must belong to one of the derived classes. The
+   virtual destructor makes sure that the derived object's destructor gets
+   called FIRST, before the base object's destructor, when the derived object
+   is accessed via a base object pointer (returned by new, for example).
+   It is UB to call delete on a derived object through a base object pointer
+   without the virtual keyword on the destructor:
+
+class AST_Node_Statement
+{
+public:
+
+    /* Default, compiler-generated destructor. */
+    virtual ~AST_Node_Statement () = default;
+
+    virtual void print_node(void) const = 0;
+};
+
+class AST_Node_Statement_Assignment : public AST_Node_Statement
+{
+public:
+
+    Symbol&              lhs_identifier;
+    AST_Node_Expression& rhs_expression;
+
+    /* Constructor. */
+    explicit AST_Node_Statement_Assignment
+        (Symbol& lhs_name_input, AST_Node_Expression& rhs_expr_input)
+    : lhs_identifier(lhs_name_input), rhs_expression(rhs_expr_input)
+    {}
+
+    ~AST_Node_Statement_Assignment () = default;
+
+    void print_node(void) const override {
+        lhs_identifier.print_node();
+        cout << " = ";
+        rhs_expression.print_node();
+    }
+};
+
+################################################################################
+################################################################################
+
+Topic: SSO
+
+Small String Optimization (SSO) is a technique used by C++ STL implementation
+to avoid the normal heap allocation for the string characters buffer of a
+std::string for small strings, instead keeping them in a small local buffer
+inside the object itself. This means the string buffer ends up on the stack
+as long as the std::string object is on the stack, which is good.
+
+Libraries using SSO: Microsoft STL, libstdc++, libc++, Boost, Folly.
+
+Source: https://pvs-studio.com/en/blog/terms/6658/
+
+################################################################################
+################################################################################
