@@ -58,14 +58,12 @@ token_type_strings = {
  * become a performance killer, so watch out.
  */
 class Token {
-private:
+public:
 
     std::string_view  token_value;
     uint64_t          token_line_in_src;
     uint32_t          token_col_in_src;
     uint32_t          token_type_ix;
-
-public:
 
     Token (std::string_view value_text, uint64_t line_in_src,
            uint32_t col_in_src,         uint32_t type_index)

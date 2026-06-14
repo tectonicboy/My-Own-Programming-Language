@@ -64,15 +64,15 @@ constexpr uint8_t EXPR_KIND_UINT64_LITERAL = 0;
 constexpr uint8_t EXPR_KIND_IDENTIFIER     = 1;
 constexpr uint8_t EXPR_KIND_BIN_OPERATION  = 2;
 
-constexpr
-const char* symbol_kinds_lookuptable[TOTAL_SYMBOL_KINDS] =
+constexpr std::array<const char*, TOTAL_SYMBOL_KINDS>
+symbol_kinds_lookuptable =
 {
     "uint64",
     "function"
 };
 
-constexpr
-const char* statement_kinds_lookuptable[TOTAL_STATEMENT_KINDS] =
+constexpr std::array<const char*, TOTAL_STATEMENT_KINDS>
+statement_kinds_lookuptable =
 {
     "assignment",
     "if_statement",
@@ -81,8 +81,8 @@ const char* statement_kinds_lookuptable[TOTAL_STATEMENT_KINDS] =
     "function_call"
 };
 
-constexpr
-const char* expression_kinds_lookuptable[TOTAL_EXPRESSION_KINDS] =
+constexpr std::array<const char*, TOTAL_EXPRESSION_KINDS>
+expression_kinds_lookuptable =
 {
     "uint64_literal",
     "identifier",
@@ -323,3 +323,80 @@ public:
         rhs_expression.print_node();
     }
 };
+
+/*----------------------------------------------------------------------------*/
+
+/* Functions on how to process each kind of Statement when the current token
+ * read by the parser indicates we've hit the start of such a statement.
+ */
+
+/* Top-level statement processor.
+ *
+ * This is the only function called by the Parsing Orchestrator, whose job is to
+ * maintain the cache locality-friendly memory arena used to store all Nodes of
+ * the constructed AST, along with any necessary bookkeeping information. The
+ * Parsing Orchestrator makes the AST of a correctly written Hirola program. It
+ * also generates the Symbol Table for the program.
+ *
+ * Argument 1: The kind of statement being processed. Dispatches to the
+ *             respective statement kind's processor function depending on what
+ *             type of statement it's asked to parse.
+ *
+ * Argument 2: A pointer to an available section of the memory arena holding all
+ *             AST Nodes of the constructed tree contiguously in a cache
+ *             locality-friendly topology, given by the Parsing Orchestrator.
+ *
+ * Argument 3: How many bytes of memory this statement's Nodes can use.
+ *
+ * Argument 4: Pointer to a bookkeeping counter keeping track of how many bytes
+ *             the recursively called child nodes' processor functions use up.
+ *             That way, each level of this statement's subtree knows where to
+ *             write its own AST Node in the arena chunk handed to the function.
+ *
+ * Returns:
+ * -------
+ *      - 0: OK: Statement, with everything that makes it up, has been parsed.
+ *               All of its AST Nodes successfully fit and placed in the given
+ *               chunk of the memory arena handed to the function.
+ *
+ *      - 1: ERR: Not enough memory to store all of the statement's AST Nodes.
+ *                In that case, the Parsing Orchestrator will call this function
+ *                again for this statement with more memory available to use.
+ */
+
+uint8_t parse_statement(uint8_t statement_kind,  uint8_t* nodes_output_mem_ptr,
+                        size_t  bytes_available, size_t*  bytes_used)
+{
+    switch(statement_kind)
+    {
+    case STATEMENT_KIND_ASSIGNMENT:
+    {
+        // Grammar: AssignmentStatement ::= IDENTIFIER "=" Expression ";"
+
+        /* Add the LHS identifier to the Symbol Table if not found there. */
+        std::unordered_map<std::string, Symbol>::iterator it = symbol_table.find("")
+
+        break;
+    } /* case   end. */
+    } /* switch end. */
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
