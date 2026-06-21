@@ -1,6 +1,137 @@
 ################################################################################
 ################################################################################
 
+Topic: Move semantics, references to rvalues and lvalues, universal references.
+
+In C++, a reference to an object is made with the syntax & or &&.
+
+A reference only to an lvalue is made with the syntax &.
+
+A reference only to an rvalue is made with the syntax && where type deduction
+is not present. If type deduction is present (mostly when used on function
+template parameter T (T&&), but also with auto&&), then the syntax && makes
+a universal reference. Univesal references can be references to both lvalues
+and rvalues. Whether a particular universal reference actually becomes an
+lvalue reference or an rvalue reference is determined when the universal
+reference is initialized, in the obvious way (what are we initializing it to?).
+
+An lvalue, as a rule of thumb, is anything you can take the address of, while
+rvalues are things you cannot take the address of.
+Think of rvalues as temporaries such as the literal 10 in "a = 10;", and
+also temporaries such as the returned value of a function at the call site.
+
+Move semantics are an optimization mechanism that allows a C++ programmer to
+write code that avoids unnecessary copying of the resources of an object owned
+by an lvalue (variable).
+
+As we know, STL containers like non-small std::strings, std::vectors etc have
+a pointer to a heap-allocated buffer where their contents actually reside. If
+we have a function that takes such an object, one way to avoid copying the
+object is to pass it by lvalue reference with &. This keeps the ownership of
+the object to the concrete lvalue we are referencing. However, if you want the
+owner of that object's resources to change while STILL avoiding copying it over,
+a thing called Move Semantics comes into play.
+
+Example: Suppose we have a class that contains and owns a large std::string and
+         the string text itself originates from a file, whose contents are
+         fread() into an initial placeholder std::string, before an object of
+         the class is constructed with that string.
+
+         By design, it's the object that contains and owns the string in the
+         long term. How do we transfer the string from the placeholder
+         std::string object to the class data member std::string?
+
+         The easiest way is to simply pass the std::string directly to the
+         constructor, like make_obj(my_string). This is pass by value and
+         creates a copy of the std::string object, making another heap
+         allocation for its internal buffer. This constructs the std::string
+         that represents the passed argument in the function's operation.
+         Another copy is done to actually construct the std::string class data
+         member FROM the passed copy.
+
+         To avoid the copies, you can take an lvalue reference to the passed
+         object with syntax & and write the constructor definition to take by
+         lvalue reference with &, but if we want zero copying, it's necessary
+         that the class contains A REFERENCE to a std::string owned by
+         some other lvalue, elsewhere. It does not express complete ownership
+         of the string object by the class:
+
+---------------------------------------------------------------------
+class my_class {
+public:
+    std::string& _string;
+    /* Constructor. */
+    my_class(std::string& str) : _string(str) {}
+    ...
+};
+
+std::string original_string = "ok";
+my_class obj1(original_string);
+
+/* Notice when constructing obj1, we did not pass the string by typing
+obj1(&original_string); because this would pass a pointer to the std::string
+object since the & here is taking its address. The compiler knows to create
+a reference to the object and not a pointer to it.
+---------------------------------------------------------------------
+
+        This creates an lvalue REFERENCE to the original std::string object
+        that exists in the caller scope. It does not copy it. However, the
+        current code says that the objects of the class hold a reference to
+        a std::string that's owned by someone else.
+
+        What if you truly want the class to contain a std::string object
+        and own it, and pass it the original std::string without copying it?
+        Enter std::move(). This function is used to express the fact that we
+        are completely moving the object's resources TO A NEW OWNER, resetting
+        the variable (lvalue) that held it and owned it before. It makes the new
+        lvalue the true owner of the object (std::string in this case). This
+        only works because the string class has a move constructor defined. If
+        passing a custom type, define you own move constructor for it. The
+        pointer to the internal heap buffer is simply given to the new owner
+        std::string (the class data member). Our constructor is defined as
+        taking a reference to an rvalue with the && syntax for this to work,
+        and then we pass the return value of std::move() to the constructor
+        at its call site, as std::move converts what we pass it to an rvalue:
+
+---------------------------------------------------------------------
+class my_class {
+public:
+    std::string _string;
+    my_class(std::string&& str) : _string(std::move(str)) {}
+    ...
+};
+
+std::string original_string = "ok";
+my_class obj1(std::move(original_string));
+---------------------------------------------------------------------
+
+With the above code, the only internal heap allocation that took place was
+when the original std::string object (original_string) was constructed. When
+the my_class object was constructed, its std::string data member becomes
+the NEW OWNER of the original std::string object, and the original_string
+variable is reset to a blank default std::string, no longer having anything
+to do with the actual string text we're passing around, which now belongs
+to the std::string data member of the class. No unnecessary copying took place.
+This can be a great performance boost if the object being passed around is
+big and/or a lot of passing around takes place frequently.
+
+NOTE: std::move() does not actually perform any moving. It simply casts the
+      type of what we passed it to an rvalue reference. It tells the compiler
+      that a new owner for what the passed object owns can be found and the
+      passed owning lvalue should be reset to a default state and its ownership
+      rights to the resources stripped from it.
+
+      Precisely, this is what std::move() does under the hood:
+
+      static_cast<std::remove_reference_t<decltype(x)>&&>(x)
+
+      It's okay if this is too complicated to comprehend. Simply knowing
+      how and when to use std::move() and rvalue references vs lvalue
+      references vs copying with pass by value, is good enough.
+
+################################################################################
+################################################################################
+
 Topic: Explicit constructors.
 
 Made with "explicit" keyword on the constructor definition.
