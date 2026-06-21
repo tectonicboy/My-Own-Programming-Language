@@ -14,13 +14,13 @@ reserved_keyword_strings = {
 
 constexpr size_t token_types_lookuptable_size = 7;
 
-constexpr uint32_t TOKEN_TYPE_IDENTIFIER  = 0;
-constexpr uint32_t TOKEN_TYPE_KEYWORD     = 1;
-constexpr uint32_t TOKEN_TYPE_OPEN_PAREN  = 2;
-constexpr uint32_t TOKEN_TYPE_CLOSE_PAREN = 3;
-constexpr uint32_t TOKEN_TYPE_OPERATOR    = 4;
-constexpr uint32_t TOKEN_TYPE_SEMICOLON   = 5;
-constexpr uint32_t TOKEN_TYPE_NUM_LITERAL = 6;
+constexpr uint32_t TOKEN_TYPE_IDENTIFIER       = 0;
+constexpr uint32_t TOKEN_TYPE_KEYWORD          = 1;
+constexpr uint32_t TOKEN_TYPE_OPEN_PAREN       = 2;
+constexpr uint32_t TOKEN_TYPE_CLOSE_PAREN      = 3;
+constexpr uint32_t TOKEN_TYPE_OPERATOR         = 4;
+constexpr uint32_t TOKEN_TYPE_SEMICOLON        = 5;
+constexpr uint32_t TOKEN_TYPE_NUM_LITERAL_UINT = 6;
 
 constexpr std::array<const char*, token_types_lookuptable_size>
 token_type_strings = {
@@ -30,7 +30,7 @@ token_type_strings = {
     "Close Parenthesis",
     "Operator",
     "Semicolon",
-    "Number Literal"
+    "Number Literal Unsigned Int"
 };
 
 /* Placed the string_view object first, to avoid a padding of empty bytes
