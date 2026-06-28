@@ -1,5 +1,3 @@
-#include <cstdint>
-
 /* This header file defines the different kinds of AST Node classes based on
  * the language's grammar, which is given here too. It also defines Symbol Table
  * resources like named indices into a lookup table of Symbol kinds, much like
@@ -191,9 +189,9 @@ public:
     void print_node(void) const override
     {
         std::cout << "(";
-        lhs_expression.print_node();
+        lhs_expression->print_node();
         std::cout << " " << binary_operator << " ";
-        rhs_expression.print_node();
+        rhs_expression->print_node();
         std::cout << ")";
     }
 };
@@ -240,7 +238,7 @@ public:
 
     void print_node(void) const override
     {
-        symbol.print_symbol_name();
+        symbol->print_symbol_name();
     }
 };
 
@@ -292,9 +290,9 @@ public:
     ~AST_Node_Statement_Assignment () = default;
 
     void print_node(void) const override {
-        lhs_identifier.print_symbol_name();
+        lhs_identifier->print_symbol_name();
         std::cout << " = ";
-        rhs_expression.print_node();
+        rhs_expression->print_node();
     }
 };
 

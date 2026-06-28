@@ -65,11 +65,11 @@ class Code_Block {
 
 public:
 
-    uint64_t start_token_index;
-    uint64_t end_token_index;
-    uint64_t code_block_type_index;
+    size_t start_token_index;
+    size_t end_token_index;
+    size_t code_block_type_index;
 
-    Code_Block(uint64_t start_ix, uint64_t end_ix, uint64_t type_ix)
+    Code_Block(size_t start_ix, size_t end_ix, size_t type_ix)
     : start_token_index(start_ix), end_token_index(end_ix),
       code_block_type_index(type_ix)
     {
