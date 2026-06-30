@@ -41,6 +41,13 @@
  *         OS API calls (syscalls) don't exist yet.
  */
 
+/* Named tuple indices (for use in "get<NAMED_INDEX>") into each entry of
+ * the Auxilliary Code Block Statement Directory.
+ */
+constexpr uint8_t STMT_DIR_BLOCK_INDEX       = 0;
+constexpr uint8_t STMT_DIR_STMT_IX           = 1;
+constexpr uint8_t STMT_DIR_NODE_ARENA_OFFSET = 2;
+
 /* Lookup tables with named indices for the kinds of Statements, Expressions
  * and Symbols found in the language's definition.
  */

@@ -24,7 +24,7 @@ int main()
         "BLOCK_START PROGRAM\n"
         "x = 5;\n"
         "base = (x + 105);\n"
-        "kk = ( (base * 1000000) - (x * x) );\n"
+        "kk = ( (base * 1000000) - (x * x));\n"
         "c = ( (x - (base * base)) / kk );\n"
         "BLOCK_END";
 
@@ -94,7 +94,7 @@ int main()
         i < my_parsing_orchestrator.statement_directory_used_entries;
         ++i)
     {
-        ((AST_Node_Statement_Assignment*)(my_parsing_orchestrator.ast_arena + std::get<2>(my_parsing_orchestrator.statement_directory[i]) ))
+        ((AST_Node_Statement_Assignment*)(my_parsing_orchestrator.ast_arena + std::get<STMT_DIR_NODE_ARENA_OFFSET>(my_parsing_orchestrator.statement_directory[i]) ))
         ->print_node();
         std::cout << "\n";
     }
