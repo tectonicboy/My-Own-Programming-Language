@@ -8,6 +8,19 @@
     }                                                                          \
     (ptr) = &((iter)->second);
 
+#define \
+EMIT_ERR_IF_SYMBOL_ABSENT_OR_GET_PTR(symbols, iter, name, ptr, src_line)       \
+    (iter) = (symbols)->find((name));                                          \
+    if( (iter) == (symbols)->end() )                                           \
+    [[unlikely]]                                                               \
+    {                                                                          \
+     std::cout << "Error: Symbol on RHS of assignment not initialized.\n";     \
+     std:: cout << "Line: " << (src_line) << "\n";                             \
+     std::abort();                                                             \
+    }                                                                          \
+    (ptr) = &((iter)->second);
+
+
 #define VERIFY_N_TOKENS_AFTER_CURSOR_EXIST(tok_arr, cursor, N) \
     if((tok_arr)->size() - ((cursor) + 1) < (N))               \
     [[unlikely]]                                               \
@@ -289,10 +302,9 @@ uint8_t Parser::parse_bin_op_expr(size_t*      token_cursor,
 
     else if((*Tokens)[cursor + 1].token_type_ix == TOKEN_TYPE_IDENTIFIER)
     {
-        ADD_SYMBOL_IF_ABSENT_AND_GET_PTR(Symbol_Table, symbol_table_iterator,
+        EMIT_ERR_IF_SYMBOL_ABSENT_OR_GET_PTR(Symbol_Table, symbol_table_iterator,
                                          std::string((*Tokens)[cursor + 1].token_value),
-                                         SYMBOL_KIND_UINT64, 0, symbol_ptr)
-
+                                         symbol_ptr, (*Tokens)[cursor + 1].token_line_in_src)
         /* Align if needed. */
         while
         (((uintptr_t)(ast_arena_region_ptr + wr_offset))
@@ -366,9 +378,9 @@ uint8_t Parser::parse_bin_op_expr(size_t*      token_cursor,
 
     else if((*Tokens)[cursor].token_type_ix == TOKEN_TYPE_IDENTIFIER)
     {
-        ADD_SYMBOL_IF_ABSENT_AND_GET_PTR(Symbol_Table, symbol_table_iterator,
-                                         std::string((*Tokens)[cursor].token_value),
-                                         SYMBOL_KIND_UINT64, 0, symbol_ptr)
+        EMIT_ERR_IF_SYMBOL_ABSENT_OR_GET_PTR(Symbol_Table, symbol_table_iterator,
+                                             std::string((*Tokens)[cursor].token_value),
+                                             symbol_ptr, (*Tokens)[cursor + 1].token_line_in_src)
 
         /* Align if needed. */
         while
@@ -534,9 +546,10 @@ uint8_t Parser::parse_assignment_statement(size_t*      token_cursor,
     /* Syntax case 2, RHS Node is this object: AST_Node_Expr_Identifier. */
     else if((*Tokens)[cursor + 2].token_type_ix == TOKEN_TYPE_IDENTIFIER)
     {
-        ADD_SYMBOL_IF_ABSENT_AND_GET_PTR(Symbol_Table, symbol_table_iterator,
-                                         std::string((*Tokens)[cursor + 2].token_value),
-                                         SYMBOL_KIND_UINT64, 0, symbol_ptr)
+        EMIT_ERR_IF_SYMBOL_ABSENT_OR_GET_PTR
+            (Symbol_Table, symbol_table_iterator,
+             std::string((*Tokens)[cursor + 2].token_value),
+             symbol_ptr, (*Tokens)[cursor + 1].token_line_in_src)
         /* Align if needed. */
         while(((uintptr_t)(ast_arena_region_ptr + wr_offset))
          % alignof(AST_Node_Expr_Identifier))
@@ -774,33 +787,6 @@ uint8_t Parser::parse_statements(size_t* start_token_cursor,
                               block_dir_ix,          &last_statement_seen,
                               &arena_offset_to_statement,
                               &statement_dir_entry_adding);
-
-/* NEED TO USE THESE HERE TO BUILD THE 2nd auxilliary table of stmt offsets.
- *
- *    std::vector<std::tuple<uint64_t, uint64_t, uint64_t>>*
-        aux_code_block_stmt_directory;
-    const size_t available_stmt_dir_entries;
-    const size_t next_free_stmt_dir_entry;
-    size_t* used_stmt_dir_entries;
- */
-        /* TODO: IMPORTANT: For this to work (filling the entry at vector[i])
-         *                  we have to make sure the capacity AND the .size()
-         *                  are reserved. .reserve(N), according to Claude,
-         *                  only sets the vector's capacity to N elements,
-         *                  but the .size() is still zero (no default-inited
-         *                  entries have been spawned into existence).
-         *                  To reserve memory for N slots to avoid too many
-         *                  hidden heap allocations AND to actually create
-         *                  the elements default-initialized so i can write
-         *                  to element N of the vector atbitrarily without
-         *                  having to push/emplace_back, we use the vector
-         *                  initialization syntax:
-         *
-         *                  //size AND capacity initialized to N:
-         *                  std::vector<T> my_vec(N);
-         *
-         *
-         */
 
         if(ret) [[unlikely]] { return 1; }
 
