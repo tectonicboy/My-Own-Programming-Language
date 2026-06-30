@@ -474,17 +474,10 @@ uint8_t Parser::parse_assignment_statement(size_t*      token_cursor,
     AST_Node_Expression* rhs_expr_node_ptr = nullptr;
     AST_Node_Statement_Assignment* statement_node_ptr = nullptr;
     size_t cursor = *token_cursor;
+    const size_t lhs_symbol_cursor = cursor;
     size_t wr_offset = *bytes_used;
     size_t next_node_wr_offset;
     uint8_t ret;
-
-    /* A pointer to a Symbol object is needed as the LHS data member.
-     * If present in the Symbol Table, add a pointer to it. If not,
-     * construct it in the Symbol Table and then add the pointer to it.
-     */
-    ADD_SYMBOL_IF_ABSENT_AND_GET_PTR(Symbol_Table, symbol_table_iterator,
-                                     std::string((*Tokens)[cursor].token_value),
-                                     SYMBOL_KIND_UINT64, 0, lhs_symbol_ptr)
 
     /* Now parse the RHS of the assignment. Parser expects the initial memory
      * address in the pointer it gave us (to the AST Arena) to point to this
@@ -588,6 +581,22 @@ uint8_t Parser::parse_assignment_statement(size_t*      token_cursor,
         std::abort();
     }
     ++cursor;
+
+    /* A pointer to a Symbol object is needed as the LHS data member.
+     * If present in the Symbol Table, add a pointer to it. If not,
+     * construct it in the Symbol Table and then add the pointer to it.
+     *
+     * We add the LHS symbol of the assignment statement here because
+     * if we do it at the start of this function, buggy code like this
+     * will not be caught:
+     *
+     * x = x + 5;
+     *
+     * Where this is the first assignment to x. This is clearly invalid code.
+     */
+    ADD_SYMBOL_IF_ABSENT_AND_GET_PTR(Symbol_Table, symbol_table_iterator,
+                                     std::string((*Tokens)[lhs_symbol_cursor].token_value),
+                                     SYMBOL_KIND_UINT64, 0, lhs_symbol_ptr)
 
     statement_node_ptr = new (ast_arena_region_ptr + (*this_node_wr_offset))
        AST_Node_Statement_Assignment(lhs_symbol_ptr, rhs_expr_node_ptr);
