@@ -1,0 +1,69 @@
+OVERVIEW OF THIS DOCUMENT
+=========================
+
+All essential information about the Hirola language compiler can be found here.
+
+This document is divided into 3 main chapters describing, respectively, the
+compiler's three primary subsystems: front end, middle end and back end.
+Each subsystem and its overall design, data structures and algorithms have both
+their high-level design and C++ implementation described here.
+
+A separate document describes various optimizations and contains writeups of
+CPU microarchitecture-aware performance analyses conducted on the compiler.
+
+
+TABLE OF CONTENTS
+=================
+
+Documentation overview...............................................
+Table of contents....................................................
+Compiler design overview.............................................
+
+CHAPTER I: Hirola Compiler Front End.................................
+1.  Front End overview...............................................
+2.  Lexer............................................................
+3.  Parser...........................................................
+4.  Semantic analysis & error reporting..............................
+
+CHAPTER II: Hirola Compiler Middle End...............................
+5.  Middle End overview..............................................
+6.  Hirola Intermediate Representation in SSA Form...................
+7.  SSA IR Generator.................................................
+8.  Compiler Optimizations [Middle End]..............................
+
+Chapter III: Hirola Compiler Back End................................
+9.  Back End overview................................................
+10. Emitting x86_64 assembly code....................................
+11. Emitting AArch64 assembly code...................................
+12. Compiler Optimizations [Back End]................................
+
+
+Chapter I: Hirola Compiler Front End
+--------------------------------------------------------------------------------
+
+1. Front End Overview
+=====================
+
+The front end of the compiler carries out 2 main operations: lexing and parsing.
+
+During lexing, the written source code is converted into objects called tokens.
+The program goes from written source code statements to an array of tokens.
+Examples of tokens are "{", "=", ";", keywords and variable names. Errors
+are reported if the written program contains unrecognized tokens. Maintained
+are the lines and columns at which each token appears, to make error reporting
+by the compiler easy to understand and high-quality.
+
+During parsing, the token array is converted into an Abstract Syntax Tree (AST).
+The AST contains one node for each encountered language construct. For instance,
+the binary operation (a + b) has its own AST Node that contains the sign symbol
+and pointers to the AST Nodes of the two operands, which themselves might be
+binary operations. Two kinds of errors are caught and reported during parsing:
+syntax errors such as missing parenthesis or semicolons, and basic semantic
+errors, such as reading a variable that has not yet been initialized.
+Implementing the AST generating parser was complicated by the fact that the
+AST is placed, node by node, inside a special memory arena, which is contiguous
+to boost spatial cache locality, rather than each Node residing in its own
+small dynamically allocated memory chunk. This is called data-oriented design.
+
+A separate Semantic Analysis pass does not exist yet, but likely will later on.
+
