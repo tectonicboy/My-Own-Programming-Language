@@ -1,0 +1,250 @@
+OVERVIEW OF THIS DOCUMENT
+=========================
+
+This document talks about the various C++ optimizations implemented in and
+used by the Hirola compiler code base. Most of them are decided to be used
+for reasons that have roots in how modern CPU microarchitecture works and
+how a human programmer can improve the way a given program utilizes it to
+achieve higher code execution speed.
+
+
+TABLE OF CONTENTS
+=================
+
+Optimizations document overview...........................................  0000
+Table of contents.........................................................  0000
+1. [C++] Avoiding excessive early STL heap allocations & copying..........  0000
+2. [C++] Emplacing objects into STL containers for direct construction....  0000
+3. [C++] Usage of move semantics to avoid copying STL containers..........  0000
+4. [C++] Usage of SSO to avoid std::string heap allocations...............  0000
+5. [CPU Cache Locality] AST Arena: Custom memory allocation scheme........  0000
+
+################################################################################
+################################################################################
+
+1. [C++] Avoiding excessive early STL heap allocations & copying
+----------------------------------------------------------------
+
+When a new STL container such as an std::vector is spawned, the default STL
+behaviour is to give its elements buffer enough memory for a very small number
+of elements to begin with. When, inevitably, the program has used up all of
+these initial entries, the container's capacity grows. Importantly, a brand
+new dynamic allocation happens, only after a free Heap region large enough
+to hold the new capacity is found, and the entire old container with all of
+its elements are COPIED into the new heap region.
+
+Even for a container that will only hold a thousand elements, this can lead to a
+dozen unnecessary copies and heap allocations for each container's lifetime.
+
+The optimization strategy to eliminate these unnecessary heap allocations and
+copy operations, for containers that WE KNOW will be populated with hundreds or
+thousands or millions of elements pretty much right after they're instantiated,
+is to RESERVE enough heap memory AT THE START of the container's lifetime, right
+when it gets spawned into existence.
+
+Two examples of this that are used in Hirola's compiler:
+
+-----------------------------------------------------------
+Example 1.1
+-----------
+
+Lexer class member:
+
+std::vector<Token> collected_tokens;
+
+in constructor body:
+
+collected_tokens.reserve(10'000);
+-----------------------------------------------------------
+Example 1.2
+-----------
+
+ParsingOrchestrator class members:
+
+std::vector<std::tuple<size_t, size_t, size_t>> statement_directory;
+size_t statement_directory_size;
+
+Initializer list:
+
+statement_directory_size(10'000),
+statement_directory(statement_directory_size,
+                    std::make_tuple((size_t)0, (size_t)0, (size_t)0))
+-----------------------------------------------------------
+
+In Example 1.1, vector.reserve() is used to make sure that particular
+vector object gets a large enough heap buffer for 10,000 elements upfront.
+Now, a heap resize and migration of the vector will only happen when the
+10001th element is inserted.
+
+In Example 1.2, we use the vector constructor that specifies a number of
+elements and the value to initialize each element with:
+
+vector( size_type count, const T& value,
+        const Allocator& alloc = Allocator() );
+
+This ensures that the particular vector will not only come with upfront
+reserved heap memory for 10,000 tuples, but will also actually have that
+many tuple elements populated at vector initialization time, so the user of
+this vector can start writing to arbitrary elements from 0 to 9999 right away.
+
+################################################################################
+################################################################################
+
+2. [C++] Emplacing objects into STL containers for direct construction
+----------------------------------------------------------------------
+
+When filling up a vector with elements using vector.push_back(), this takes
+an already constructed temporary object and copies it into the vector.
+
+If a temporary copy of each element is not needed, you can construct the element
+directly inside the heap buffer of the vector using vector.emplace_back().
+
+Here is an example in the Hirola compiler:
+
+Lexer function that processes a semicolon and emplaces it in the token array:
+
+__attribute__((always_inline))
+inline void Lexer::lex_semicolon(void)
+{
+    collected_tokens.emplace_back
+        (std::string_view((const char*)&(source_code[cursor]), 1),
+         current_line_ix, current_col_ix, TOKEN_TYPE_SEMICOLON);
+    ++current_col_ix;
+    ++cursor;
+}
+
+NOTE:
+This works for other STL containers, not just vectors. Here's an example
+from the Hirola compiler:
+
+Finding a symbol in the Symbol Table, emplacing it in the unordered_map if not
+found and grabbing a pointer to the value (Symbol object) of the <key, value>
+element of the unordered_map:
+
+#define ADD_SYMBOL_IF_ABSENT_AND_GET_PTR(symbols, iter, name, type, val, ptr)  \
+    (iter) = (symbols)->find((name));                                          \
+    if( (iter) == (symbols)->end() )                                           \
+    [[unlikely]]                                                               \
+    {                                                                          \
+        (iter) =                                                               \
+            ((symbols)->emplace((name), Symbol((type), (name), (val)))).first; \
+    }                                                                          \
+    (ptr) = &((iter)->second);
+
+################################################################################
+################################################################################
+
+3. [C++] Usage of move semantics to avoid copying STL containers
+----------------------------------------------------------------
+
+When the owner object of an STL container has to change, but keep that same
+STL container the way it currently is, you can relocate the STL container to the
+new owning object (Lvalue) using std::move() without copying it at all.
+
+Here's an example from the Hirola compiler:
+
+ParsingOrchestrator class taking ownership of the Token Array from the Lexer.
+
+Orchestrator class member:
+
+std::vector<Token> Tokens;
+
+Orchestrator constructor input argument list:
+
+explicit ParsingOrchestrator(std::vector<Code_Block>&& code_block_dir,
+                             std::vector<Token>&&      token_array,
+                             .....
+
+Orchestrator initializer list:
+
+Tokens(std::move(token_array))
+
+Compiler finished with lexing and setting up to begin parsing, instantiating
+a ParsingOrchestrator object, std::move()ing the Token Array (collected_tokens)
+to it from its previous owning Lvalue (data member of Lexer):
+
+ParsingOrchestrator my_parsing_orchestrator
+    (std::move(lexer1.aux_code_block_directory),
+     std::move(lexer1.collected_tokens),
+     parsing_quotas);
+
+Note how the Auxilliary Code Block Directory is relocated to its new owner
+inside the ParsingOrchestrator in exactly the same way.
+
+The new owner Lvalue simply receives a pointer to the existing heap buffer
+wherein the STL container's elements are already stored, no copying and no
+excessive heap allocations are done. This is a performance booster, especially
+if the STL container is being given new owners (by design) often at runtime.
+
+The move constructor of the object is called to actually transfer ownership to
+the new Lvalue, such as giving it a pointer to the existing heap buffer, etc.
+Standard STL containers already have one defined, so move semantics work out of
+the box for them, but if using move semantics to change the owner Lvalue of
+custom objects without copying them, the C++ programmer must define their own
+move constructor for their custom class.
+
+std::move() itself doesn't do any actual moving of object resources to new
+owner Lvalues. It simply indicates to the compiler that this Lvalue should be
+converted to an Rvalue reference, so that it can be "assigned to" a new owner.
+This is why the Orchestrator constructor argument list takes the Tokens vector
+with "std::vector<Code_Block>&&", the && makes it an Rvalue reference. During
+an expression, an Rvalue reference is still an Lvalue, so a second std::move()
+call is invoked in the Orchestrator initializer list. At least I think that's
+how it works. In either case, this saves unnecessary copying & heap allocations
+and is thus a performance booster while keeping the neat system design idea of
+changing the owner of an object. Sweet :)
+
+################################################################################
+################################################################################
+
+4. [C++] Usage of SSO to avoid std::string heap allocations
+-----------------------------------------------------------
+
+SSO stands for Small String Optimization and in the context of the C++ STL,
+it means that, for small enough strings, a std::string object will NOT hold
+the string characters into a heap-allocated buffer, but rather in the object
+itself as a direct data member. How small the string has to be for this
+optimization to kick is defined by each STL implementation.
+
+In the Hirola compiler, example std::string objects that are likely using this
+optimization under the hood are symbol_name members of the Symbol class, as
+these are variable names, function names, etc, which are often just a few ASCII
+characters long.
+
+################################################################################
+################################################################################
+
+5. [CPU Cache Locality] AST Arena: Custom memory allocation scheme
+
+In naive implementations, the Abstract Syntax Tree has each of its AST Nodes
+reside in their own heap-allocated memory chunks. This is what std::map and
+std::set would do, for example. At least in most STL implementations by default.
+
+You can in theory change the allocator used by the STL container's constructor,
+to avoid these heap allocations or have a single heap-allocated arena that keeps
+AST Nodes contiguous.
+
+This is not what has been done in the Hirola compiler.
+
+Instead, a fully hand-managed byte buffer is used. This is called the AST Arena.
+Each new AST Node object is placed right next to the previous one, contiguously.
+Empty bytes between objects are only there to follow alignment equirements.
+
+While no microarchitecture-aware performance analysis has been conducted yet,
+this is bound to improve spatial cache locality and lead to faster parsing.
+Will be interesting to compare this to a naive implementation where each AST
+Node is a new heap allocation. More on this later.
+
+[WARNING: The following has not been implemented yet]
+The parsing orchestrator gives a free region of the AST Arena to each Parser
+that it spawns. If one Parser runs out of memory, the Parsing Orchestrator waits
+for the result of the other Parsers that it spawned and moves any completed AST
+Nodes to the resized new heap memory wherein the larger AST Arena is moved to.
+This dispatching of separate regions of the AST Arena to multiple Parsers in a
+multithreaded design has not been implemented yet, as there is only a single
+Code Block in the language for now. When functions and scopes are added, this
+multithreaded parsing will be implemented and multiple Code Blocks will be able
+to get parsed and an AST emitted out of in parallel by multiple threads at once.
+
+################################################################################
+################################################################################
