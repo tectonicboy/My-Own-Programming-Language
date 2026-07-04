@@ -24,18 +24,21 @@ CHAPTER I: Hirola Compiler Front End.................................
 2.  Lexer............................................................
 3.  Parser...........................................................
 4.  Semantic analysis & error reporting..............................
+5.  Source file contents summary for the Front End...................
 
 CHAPTER II: Hirola Compiler Middle End...............................
-5.  Middle End overview..............................................
-6.  Hirola Intermediate Representation in SSA Form...................
-7.  SSA IR Generator.................................................
-8.  Compiler Optimizations [Middle End]..............................
+6.  Middle End overview..............................................
+7.  Hirola Intermediate Representation in SSA Form...................
+8.  SSA IR Generator.................................................
+9.  Compiler Optimizations [Middle End]..............................
+10. Source file contents summary for the Middle End..................
 
 Chapter III: Hirola Compiler Back End................................
-9.  Back End overview................................................
-10. Emitting x86_64 assembly code....................................
-11. Emitting AArch64 assembly code...................................
-12. Compiler Optimizations [Back End]................................
+11. Back End overview................................................
+12. Emitting x86_64 assembly code....................................
+13. Emitting AArch64 assembly code...................................
+14. Compiler Optimizations [Back End]................................
+15. Source file contents summary for the Back End....................
 
 
 Chapter I: Hirola Compiler Front End
@@ -63,7 +66,184 @@ errors, such as reading a variable that has not yet been initialized.
 Implementing the AST generating parser was complicated by the fact that the
 AST is placed, node by node, inside a special memory arena, which is contiguous
 to boost spatial cache locality, rather than each Node residing in its own
-small dynamically allocated memory chunk. This is called data-oriented design.
+small dynamically allocated memory chunk. This is called data-oriented design
+and improves the way modern CPUs are utilized given their microarchitecture.
 
 A separate Semantic Analysis pass does not exist yet, but likely will later on.
 
+
+2. Lexer
+========
+
+The Lexer carries out the operation of turning the written source code program
+into the array of tokens. This is the primary output of the Lexer. It also has
+1 secondary output as a byproduct - Auxilliary Code Block Directory, which is
+simply an array of entries, where each entry gives the index of the start and
+end token of each Code Block, plus the type of the Code Block.
+
+A Code Block is a building block of the source program, is surrounded by { and }
+with its start and end designated with special syntax. Examples of Code Blocks
+are function definitions, the main program block, a custom data structure type
+definition, (a collection of) assignments to global variables. This separation
+of the input program is meant to allow multithreaded Parser operation.
+
+Each Token object contains 4 fields:
+    - a std::string_view into the input source string where the token appeared;
+    - Source line and column where the token appeared;
+    - The type of the token.
+
+The Lexer is itself represented with a class. That way, multiple Lexer objects
+can be spawned to process multiple input source files on multiple threads.
+The primary fields of each Lexer object are the std::vector of Token objects
+and one of Code_Block objects, along with the source code string. The other
+fields are auxilliary and aid in the lexing operation, like current_lexeme_len.
+Its only member function is what carries out the tokenizing of that Lexer's
+own source code string.
+
+
+3. Parser
+=========
+
+The parser constructs the AST of a given part of the input source program.
+
+The parsing operation is implemented in the following way:
+
+A Parsing Orchestrator is spawned, one per source file. It uses the
+Auxilliary Code Block Directory populated by the Lexer to tell multiple parsers
+individually which Code Blocks of the Token Array of the input source program to
+parse and emit an AST and a Symbol Table of, which allows for efficient
+multithreaded parsing.
+
+The Symbol Table is held in a C++ std::unordered_map, with the key being the
+actual token name string and the corresponding value being a Token object.
+Maintaining the Symbol Table in any sorted order is not needed, thus the C++
+unordered_map is better than an ordered STL map.
+
+Symbols are represented as a class. Each Symbol object contains 3 things:
+    - The kind of Symbol this is;
+    - The actual symbol name string;
+    - The type of the Symbol - a multi-bitfield uint64_t documented descriptor.
+
+The AST is held in a special memory arena of bytes. Each arena slot contains one
+AST Node, plus any byte offset its alignment requirements may have incurred.
+A special data structure called the Auxilliary Code Block Statement Directory
+contains the byte offset into the Arena of each source statement, aka of the
+root of each subtree, completing the whole AST structure.
+
+Each AST Node is represented by its own class. AST Nodes that can be of several
+types are repesented by one non-instantiable abstact base class and a derived
+concrete class for each of this Node's types. For example, Expression can be a
+binary_operation, a literal or a symbol.
+
+Each AST Node type has its own processor function which is called when that Node
+type is encountered in the Token Array. The language grammar is made to be
+unambiguous enough that the first token of any language construct (an assignment
+statement, a binary_operation on the right hand side of an assignment, etc)
+immediately tells the Parser what kind of AST Node this is and thus, which
+processor function to call, adding much needed simplicity to the design and
+implementation of AST construction.
+
+
+4. Semantic analysis & error reporting
+======================================
+
+Lexing catches and reports basic syntax errors when an unknown symbol is seen,
+which is not part of the defined symbols in the language grammar.
+
+Parsing, during AST construction, catches all other syntax errors, such as
+missing parentheses and semicolons, plus basic semantic errors. For now, this
+only includes reporting a variable read before it has been initialized.
+
+A fully fledged semantic analysis pass doesn't exist, but likely will later on.
+
+
+5.  Source file contents summary for the Front End
+==================================================
+
+src/frontend/
+
+    ============================================================================
+    ============================================================================
+    1)  token.h    1.1) Lookup tables and named indices into them for all Code
+        -------         Block types, all language keywords, all token types.
+
+                   1.2) Class definitions for Token and Code_Block.
+
+                   LoC: 164
+    ============================================================================
+    ============================================================================
+    2) lexer.h     2.1) Class definition for Lexer.
+       -------
+                   2.2) Function definitions: Processor functions used by Lexer
+                                              on how to process each Token type.
+
+                   2.3) Function definition: The main Lexing operation itself.
+
+                   LoC: 400
+    ============================================================================
+    ============================================================================
+    3) ast.h       3.1) Named indices for each field of the tuples that are the
+       -----            entries of the Auxillary Code Block Statement Directory.
+
+                   3.2) Counters for total number of symbol kinds, statement
+                        kinds and expression kinds.
+
+                   3.3) Lookup tables and named indices into them for all Symbol
+                        kinds, all statement kinds and all expression kinds.
+
+                   3.4) Class definition for:
+                            - Symbol
+                            - Expression: abstract class & concrete subclasses
+                            - Statement:  abstract class & concrete subclasses
+
+                   LoC: 262
+    ============================================================================
+    ============================================================================
+    4) parser.h    4.1) Parameterized macros for:
+       --------             - Add symbol to ST if not found, get a pointer to it
+                            - Give error if symbol not in ST, or get a ptr to it
+
+                   4.2) Class definitions fo ParsingOrchestrator and Parser.
+
+                   4.3) Function definition: Ochestator spawning a Praser.
+
+                   4.4) Function definitions for:
+                            - Top-level parsing of a Code Block's statements
+                            - Top-level processor for any individual statement
+                            - Processor to parse an assignment statement
+                            - Processor to parse a binary operation
+
+                   LoC: 842
+    ============================================================================
+    ============================================================================
+    5) compiler-hirola.cpp
+       -------------------
+
+                   5.1) Includes for standard headers & project header files.
+
+                   5.2) Example Hirola programs held in std::strings.
+
+                   5.3) Instantiating Lexer & ParsingOrchestrator to tokenize
+                        and emit the AST of the given input program, using
+                        clock_gettime(CLOCK_MONOTONIC_RAW, &tv1);
+                        to see wall clock time taken of these two phases.
+
+                   5.4) A loop going over each created AST Node reconstructing
+                        the entire program from the AST successfully.
+
+                   LoC: 186
+    ============================================================================
+    ============================================================================
+
+
+CHAPTER II: Hirola Compiler Middle End
+--------------------------------------------------------------------------------
+
+To be written when SSA IR generator is implemented.
+
+
+Chapter III: Hirola Compiler Back End
+--------------------------------------------------------------------------------
+
+To be written when x86_64 assembly code generator and final executable file
+emitting are implemented.
