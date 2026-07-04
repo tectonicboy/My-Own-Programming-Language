@@ -1,44 +1,20 @@
-/* This header file defines the different kinds of AST Node classes based on
- * the language's grammar, which is given here too. It also defines Symbol Table
- * resources like named indices into a lookup table of Symbol kinds, much like
- * the Token header defines named indices into a lookup table of Token kinds.
- *
- * Language Grammar:
+/* Language Grammar:
  * ----------------
  *
- * Program ::= Statement+ "PROG_END"
- *
- * Statement ::= AssignmentStatement   (later: FuncCallStatement, IF ELSE, etc)
- *
+ * Program             ::= Statement+ "PROG_END"
+ * Statement           ::= AssignmentStatement
  * AssignmentStatement ::= IDENTIFIER "=" Expression ";"
- *
- * Expression ::= INT_LITERAL | IDENTIFIER | BinaryOperation
- *
- * BinaryOperation ::= "(" Expression BinaryOperator Expression ")"
- *
- * BinaryOperator ::= "+" | "-" | "*" | "/"
- *
- * IDENTIFIER ::= [a-zA-Z_]+
- *
- * INT_LITERAL ::= [0-9]+
+ * Expression          ::= INT_LITERAL | IDENTIFIER | BinaryOperation
+ * BinaryOperation     ::= "(" Expression BinaryOperator Expression ")"
+ * BinaryOperator      ::= "+" | "-" | "*" | "/"
+ * IDENTIFIER          ::= [a-zA-Z_]+
+ * INT_LITERAL         ::= [0-9]+
  *
  * Semantic Rules:
  * --------------
  *
- * Rule 1: Each complex expression must be parenthesized. This gives the order
- *         that operations are carried out in, no ambiguous operator precedence.
- *
- * Rule 2: Variables must be assigned to, before being read. No declarations
+ * Rule 1: Variables must be assigned to, before being read. No declarations
  *         without initialization are possible, for clarity and unambiguity.
- *
- * Rule 3: "PROG_END" signifies the end of the program. Place at source end.
- *
- * Rule 4: Each Statement ends with a semicolon.
- *
- * Rule 5: Unsigned 64-bit integer-only expressions & expression operands.
- *         Strings, negative and floating point numbers don't exist yet.
- *         Functions and control flow don't exist yet. Pointers don't exist yet.
- *         OS API calls (syscalls) don't exist yet.
  */
 
 /* Named tuple indices (for use in "get<NAMED_INDEX>") into each entry of
@@ -48,14 +24,14 @@ constexpr uint8_t STMT_DIR_BLOCK_INDEX       = 0;
 constexpr uint8_t STMT_DIR_STMT_IX           = 1;
 constexpr uint8_t STMT_DIR_NODE_ARENA_OFFSET = 2;
 
-/* Lookup tables with named indices for the kinds of Statements, Expressions
- * and Symbols found in the language's definition.
- */
-
+/* Counters for total symbol kinds, statement kinds and expression kinds. */
 constexpr uint8_t TOTAL_SYMBOL_KINDS     = 2;
 constexpr uint8_t TOTAL_STATEMENT_KINDS  = 5;
 constexpr uint8_t TOTAL_EXPRESSION_KINDS = 3;
 
+/* Lookup tables with named indices for the kinds of Statements, Expressions
+ * and Symbols found in the language's definition.
+ */
 constexpr uint8_t SYMBOL_KIND_UINT64   = 0;
 constexpr uint8_t SYMBOL_KIND_FUNCTION = 1;
 
@@ -93,14 +69,12 @@ expression_kinds_lookuptable =
     "identifier",
     "binary_operation"
 };
-
 /*----------------------------------------------------------------------------*/
 
 /* The Symbol class. */
 class Symbol
 {
 public:
-
     /* Every symbol in the source code has a name, a type and a value. */
     std::string symbol_name;
     uint8_t symbol_kind_ix;
@@ -115,11 +89,13 @@ public:
      * to store the count of arguments the function expects when called.
      * These bitfield subsections will be documented.
      */
-    uint64_t value;
+    uint64_t symbol_type;
 
     /* Constructor. */
-    explicit Symbol(uint8_t kind_input, std::string name_input, uint64_t val_in)
-    : symbol_name(name_input), symbol_kind_ix(kind_input), value(val_in) {}
+    explicit
+    Symbol(uint8_t kind_input, std::string name_input, uint64_t type_in)
+    : symbol_name(name_input), symbol_kind_ix(kind_input), symbol_type(type_in)
+    {}
 
     void print_symbol_name(void) const
     {
@@ -131,27 +107,24 @@ public:
         std::cout << symbol_kinds_lookuptable[symbol_kind_ix];
     }
 
-    void print_symbol_value(void) const
+    /* This will be more complicated when types and functions are added. */
+    void print_symbol_type(void) const
     {
-        std::cout << value;
+        std::cout << type;
     }
 };
-
 /*----------------------------------------------------------------------------*/
 
 /* Abstract class. Concrete subclasses are the different expression kinds. */
 class AST_Node_Expression
 {
 public:
-
     uint8_t expr_kind_ix;
 
 protected:
-
     AST_Node_Expression(uint8_t kind_input) : expr_kind_ix(kind_input) {}
 
 public:
-
     virtual ~AST_Node_Expression () = default;
 
     void print_expr_kind(void) const
@@ -161,15 +134,12 @@ public:
 
     virtual void print_node(void) const = 0;
 };
-
 /*----------------------------------------------------------------------------*/
 
 /* The concrete subclass representing an expression of type Binary Operation. */
-
 class AST_Node_Expr_BinOp : public AST_Node_Expression
 {
 public:
-
     AST_Node_Expression* lhs_expression;
     AST_Node_Expression* rhs_expression;
 
@@ -202,15 +172,12 @@ public:
         std::cout << ")";
     }
 };
-
 /*----------------------------------------------------------------------------*/
 
 /* The concrete subclass representing an expression of type UINT64 Literal. */
-
 class AST_Node_Expr_UINT64_Literal : public AST_Node_Expression
 {
 public:
-
     uint64_t value;
 
     /* Constructor. */
@@ -225,15 +192,12 @@ public:
         std::cout << value;
     }
 };
-
 /*----------------------------------------------------------------------------*/
 
 /* The concrete subclass representing an expression of kind Identifier. */
-
 class AST_Node_Expr_Identifier : public AST_Node_Expression
 {
 public:
-
     Symbol* symbol;
 
     /* Constructor. */
@@ -248,7 +212,6 @@ public:
         symbol->print_symbol_name();
     }
 };
-
 /*----------------------------------------------------------------------------*/
 
 /* Abstract base class for Statement AST Nodes.
@@ -257,15 +220,12 @@ public:
 class AST_Node_Statement
 {
 public:
-
     uint8_t statement_kind_ix;
 
 protected:
-
     AST_Node_Statement(uint8_t kind_input) : statement_kind_ix(kind_input) {}
 
 public:
-
     /* Default, compiler-generated destructor. */
     virtual ~AST_Node_Statement () = default;
 
@@ -276,15 +236,12 @@ public:
 
     virtual void print_node(void) const = 0;
 };
-
 /*----------------------------------------------------------------------------*/
 
 /* The concrete Statement subclass representing an assignment statement. */
-
 class AST_Node_Statement_Assignment : public AST_Node_Statement
 {
 public:
-
     Symbol*              lhs_identifier;
     AST_Node_Expression* rhs_expression;
 
@@ -302,5 +259,4 @@ public:
         rhs_expression->print_node();
     }
 };
-
 /*----------------------------------------------------------------------------*/
