@@ -115,7 +115,7 @@ parse and emit an AST and a Symbol Table of, which allows for efficient
 multithreaded parsing.
 
 The Symbol Table is held in a C++ std::unordered_map, with the key being the
-actual token name string and the corresponding value being a Token object.
+actual token name string and the corresponding value being a Symbol object.
 Maintaining the Symbol Table in any sorted order is not needed, thus the C++
 unordered_map is better than an ordered STL map.
 
