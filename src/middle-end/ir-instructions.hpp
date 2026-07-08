@@ -85,17 +85,18 @@ class ir_insn_div {
 public:
     std::string lhs_operand;
     std::string rhs_operand;
-    std::string target;
+    std::string quotient;
+    std::string remainder;
 
     explicit ir_insn_div(std::string lhs_operand_in, std::string rhs_operand_in,
-                         std::string target_in)
+                         std::string quotient_in, std::string remainder_in)
     : lhs_operand(lhs_operand_in), rhs_operand(rhs_operand_in),
-      target(target_in) {}
+      quotient(quotient_in), remainder(remainder_in) {}
 
     void print_ir_insn(void) const
     {
-        std::cout << target << " = " << lhs_operand << " / " << rhs_operand
-                  << "\n";
+        std::cout << quotient << ", " << remainder << " = "
+                  << lhs_operand << " / " << rhs_operand << "\n";
     }
 };
 

@@ -90,11 +90,13 @@ public:
      * These bitfield subsections will be documented.
      */
     uint64_t symbol_type;
+    uint64_t SSA_IR_mangle_counter;
 
     /* Constructor. */
     explicit
     Symbol(uint8_t kind_input, std::string name_input, uint64_t type_in)
-    : symbol_name(name_input), symbol_kind_ix(kind_input), symbol_type(type_in)
+    : symbol_name(name_input), symbol_kind_ix(kind_input), symbol_type(type_in),
+      SSA_IR_mangle_counter(1)
     {}
 
     void print_symbol_name(void) const
