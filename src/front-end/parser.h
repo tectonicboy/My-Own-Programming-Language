@@ -54,7 +54,7 @@ public:
 
     std::vector<Token>      Tokens;
 
-    alignas(64) uint8_t* ast_arena;
+    uint8_t* ast_arena;
     size_t   ast_arena_size;
     size_t   ast_arena_next_free_region_offset;
     size_t   ast_arena_used_bytes;
@@ -85,7 +85,8 @@ public:
         ast_arena = (uint8_t*)malloc(ast_arena_size);
         if(ast_arena == NULL)
         {
-            std::cout << "Internal error: Allocating the AST arena failed.\n";
+            std::cout << "Internal compiler error: "
+                         "Allocating the AST arena failed.\n";
             perror("errno: ");
             std::abort();
         }
