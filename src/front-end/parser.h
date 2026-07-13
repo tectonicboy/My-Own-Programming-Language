@@ -227,6 +227,13 @@ ParsingOrchestrator::spawn_parser(std::vector<size_t> parsing_quota)
     return 0;
 }
 
+/* HUGE BUGFIX TODO: When checking whether the AST Arena has enough memory
+ *                   for us to construct the new AST Node object in it,
+ *                   check for wr_offset + sizeof(AST_Object) and remove
+ *                   the second check. Right now we write the object, move the
+ *                   wr_offset AND ONLY THEN check if there was enough memory
+ *                   to write the object. BUG!
+ */
 uint8_t Parser::parse_bin_op_expr(size_t*      token_cursor,
                                   uint8_t*     ast_arena_region_ptr,
                                   const size_t bytes_available,
