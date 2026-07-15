@@ -3,6 +3,7 @@
 CXXFLAGS += -D_GNU_SOURCE
 CXXFLAGS += -Wall
 CXXFLAGS += -Wextra
+CXXFLAGS += -Werror
 CXXFLAGS += -Wcast-align
 CXXFLAGS += -Wfloat-equal
 CXXFLAGS += -Wformat=2
@@ -32,8 +33,8 @@ CXX     = g++
 OPTIMIZATION_LEVEL = -O3
 ARCH_FLAGS = -march=native
 
-SRC = src/frontend/compiler-hirola.cpp
-BIN = bin/frontend/compiler-hirola
+SRC = src/front-end/compiler-hirola.cpp
+BIN = bin/front-end/compiler-hirola
 
 lexer:
 	$(CXX) $(SRC) -o $(BIN) \
