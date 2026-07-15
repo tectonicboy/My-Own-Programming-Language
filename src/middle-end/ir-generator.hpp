@@ -501,6 +501,8 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
 {
     uint8_t assignment_rhs_expr_kind = stmt_node->rhs_expression->expr_kind_ix;
     std::string assignment_lhs_src_var = stmt_node->lhs_identifier->symbol_name;
+    std::string assignment_rhs_var1;
+    std::string assignment_rhs_var2;
     uint8_t ret = 0;
     size_t  i;
     bool    literal_has_already_been_encountered = false;
@@ -599,15 +601,6 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
             ++insns_emitted_for_this_stmt;
         }
 
-        /* Operand 1 of Case 1 is done. The only input operand for case 1.
-         * Now construct the string for LHS of this assignment IR instruction.
-         *
-         * To make the string ir_insn_target:
-         *
-         * Look at the counter in this source variable's Symbol object, use
-         * current counter, then increment counter (for use in the next IR
-         * assignment to this same source variable, to maintain SSA IR form).
-         */
         ir_insn_target =
                std::string("%") + assignment_lhs_src_var + std::string("_")
              + std::to_string(stmt_node->lhs_identifier->SSA_IR_mangle_counter);
@@ -627,8 +620,29 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
     /* Case 2. Direct assignment from another source variable: a = b */
     else if(assignment_rhs_expr_kind == EXPR_KIND_IDENTIFIER)
     {
-        /* PLACEHOLDER, REMOVE THE ABORT WHEN I GET TO IMPLEMENTING THIS. */
-        std::abort();
+        rhs_expr_identifier =
+            (AST_Node_Expr_Identifier*)(stmt_node->rhs_expression);
+
+        assignment_rhs_var1 = rhs_expr_identifier->symbol->symbol_name;
+
+        ir_insn_operand1 =   std::string("%") + assignment_rhs_var1
+                           + std::string("_") + std::to_string
+                       (rhs_expr_identifier->symbol->SSA_IR_mangle_counter - 1);
+
+        ir_insn_target =   std::string("%") + assignment_lhs_src_var
+                         + std::string("_") + std::to_string
+                             (stmt_node->lhs_identifier->SSA_IR_mangle_counter);
+
+        ret = emit_IR_insn_EQU
+                (ir_insn_target,
+                ir_insn_operand1,
+                &wr_offset, bytes_available, code_block_ix, statement_ix,
+                insns_emitted_for_this_stmt);
+
+        if(ret) [[unlikely]] { return ret; }
+
+        ++insns_emitted_for_this_stmt;
+        stmt_node->lhs_identifier->SSA_IR_mangle_counter += 1;
     }
 
     /* Case 3. Assignment from a (possibly multi-level) binary operation. */

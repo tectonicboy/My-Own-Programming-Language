@@ -26,12 +26,12 @@ int main()
     std::string first_program =
     "BLOCK_START PROGRAM\n"
     "a = 5;\n"
-    "b = 7;\n"
-    "c = 9;\n"
-    "a = 5;\n"
+    "b = 0;\n"
+    "c = 9444;\n"
+    "c = a;\n"
     "a = 7;\n"
-    "b = 9;\n"
-    "d = 5;\n"
+    "b = a;\n"
+    "d = c;\n"
     "BLOCK_END";
 
 /*
