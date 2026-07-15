@@ -1,3 +1,34 @@
+class IR_Instructions_Directory_Entry {
+public:
+
+    size_t code_block_ix;
+    size_t statement_ix;
+    size_t ir_insn_ix;
+    size_t ir_insn_arena_offset;
+    size_t which_ir_instruction;
+
+    /* Constructor */
+    explicit IR_Instructions_Directory_Entry
+    (size_t code_block_ix_in, size_t statement_ix_in,
+     size_t ir_insn_ix_in,    size_t ir_insn_arena_offset_in,
+     size_t which_ir_insn_in)
+    : code_block_ix(code_block_ix_in), statement_ix(statement_ix_in),
+      ir_insn_ix(ir_insn_ix_in), ir_insn_arena_offset(ir_insn_arena_offset_in),
+      which_ir_instruction(which_ir_insn_in)
+    {}
+
+    void print_entry(void)
+    {
+        std::cout << "Code Block          : " << code_block_ix        << "\n"
+                  << "Statement           : " << statement_ix         << "\n"
+                  << "IR Instruction Index: " << ir_insn_ix           << "\n"
+                  << "IR Instruction Type : " << which_ir_instruction << "\n"
+                  << "IR Arena Offset     : " << ir_insn_arena_offset << "\n";
+        return;
+    }
+
+};
+
 /* Receives from a Parsing Orchestrator:
  *
  *  - Populated Auxilliary Code Block Statement Directory
@@ -25,18 +56,21 @@ public:
     const size_t statement_directory_used_entries;
 
     /* Brings into existence these new things: */
-    uint8_t* IR_instructions_arena;
     size_t   IR_instructions_arena_size;
+    uint8_t* IR_instructions_arena;
     size_t   IR_instructions_arena_free_region_offset;
     size_t   IR_instructions_arena_used_bytes;
+
+    size_t IR_instructions_dir_init_size;
+    size_t IR_instructions_dir_used_entries;
+    std::vector<IR_Instructions_Directory_Entry> IR_instructions_directory;
 
     /* Receives this from the top-level compilation driver: */
     std::vector<std::vector<size_t>> IR_generation_quotas;
 
     /* Constructor */
     explicit IR_Generation_Orchestrator
-        (std::unordered_map<std::string,
-         Symbol>&& sym_table_in,
+        (std::unordered_map<std::string, Symbol>&& sym_table_in,
          uint8_t* ast_arena_in,
          std::vector<std::tuple<size_t, size_t, size_t>>&& statement_dir_in,
          const size_t statement_dir_num_used_entries_in,
@@ -55,6 +89,10 @@ public:
       IR_instructions_arena_size(100'000),
       IR_instructions_arena_free_region_offset(0),
       IR_instructions_arena_used_bytes(0),
+      IR_instructions_dir_init_size(10'000),
+      IR_instructions_dir_used_entries(0),
+      IR_instructions_directory(IR_instructions_dir_init_size,
+            IR_Instructions_Directory_Entry(0, 0, 0, 0, 0)),
       /* TODO: The quotas vector of vectors ownership movement is incomplete.
        *       When the ParsingOrchestrator gets it, it doesnt take ownership
        *       from the main compilation driver. Make it so that it does, and
@@ -100,6 +138,8 @@ public:
  *
  */
 class IR_Generator {
+
+public:
     /* Receives from an IR Generation Orchestrator: */
     std::unordered_map<std::string, Symbol>* Symbol_Table;
     uint8_t* ast_arena;
@@ -118,6 +158,11 @@ class IR_Generator {
      */
     size_t* IR_instructions_arena_used_bytes;
 
+    const size_t IR_instructions_dir_first_free_entry;
+    const size_t IR_instructions_dir_available_entries;
+    std::vector<IR_Instructions_Directory_Entry>* IR_instructions_directory;
+    size_t* IR_instructions_dir_used_entries;
+
     std::vector<size_t> IR_generation_quota;
 
     size_t IR_intermediates_emitted;
@@ -125,9 +170,9 @@ class IR_Generator {
     size_t IR_instructions_emitted;
     size_t count_statements_it_emitted_IR_for;
 
-    const encountered_u64_literals_array_init_size;
-    encountered_u64_literals_array_cur_size;
-    std::vector<size_t> encountered_u64_literals;
+    const size_t encountered_u64_literals_array_init_size;
+    size_t encountered_u64_literals_array_cur_size;
+    std::vector<size_t> encountered_u64_literals_array;
 
     /* Constructor */
     explicit IR_Generator
@@ -140,6 +185,10 @@ class IR_Generator {
          const size_t IR_instructions_arena_free_region_offset_in,
          const size_t IR_instructions_arena_bytes_available_in,
          size_t* IR_instructions_arena_used_bytes_ptr_in,
+         const size_t IR_insns_dir_first_free_entry_in,
+         const size_t IR_insns_dir_available_entries_in,
+         std::vector<IR_Instructions_Directory_Entry>* IR_instructions_dir_in,
+         size_t* IR_insn_dir_used_entries_in,
          std::vector<size_t> IR_generation_quota_in
         )
     : Symbol_Table(sym_table_ptr_in),
@@ -153,13 +202,17 @@ class IR_Generator {
       IR_instructions_arena_bytes_available
         (IR_instructions_arena_bytes_available_in),
       IR_instructions_arena_used_bytes(IR_instructions_arena_used_bytes_ptr_in),
+      IR_instructions_dir_first_free_entry(IR_insns_dir_first_free_entry_in),
+      IR_instructions_dir_available_entries(IR_insns_dir_available_entries_in),
+      IR_instructions_directory(IR_instructions_dir_in),
+      IR_instructions_dir_used_entries(IR_insn_dir_used_entries_in),
       IR_generation_quota(IR_generation_quota_in),
       IR_intermediates_emitted(0),
       count_u64_literals_seen(0),
       IR_instructions_emitted(0),
       count_statements_it_emitted_IR_for(0),
-      encountered_u64_literals_array_init_size(1000),
-      encountered_u64_literals_array_cur_size(0),
+      encountered_u64_literals_array_init_size(1'000),
+      encountered_u64_literals_array_cur_size(0)
     {
         encountered_u64_literals_array.reserve
             (encountered_u64_literals_array_init_size);
@@ -170,26 +223,53 @@ class IR_Generator {
     uint8_t emit_IR_for_block(size_t ast_node_first_statement_index,
                               size_t block_index_in_statement_dir);
 
-    uint8_t emit_IR_for_assignment(AST_Node_Statement_Assignment*);
+    uint8_t emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
+                                     const size_t code_block_ix,
+                                     const size_t statement_ix);
 
     /* The IR instruction emitter functions will handle any padding bytes
      * because of alignment requirements themselves. Therefore, output pointer
      * passed to it should be at the immediate free byte where the last IR
      * instruction's object ends in the arena.
      */
-    uint8_t emit_IR_insn_EQU(std::string lhs, std::string_rhs);
+    uint8_t emit_IR_insn_EQU(std::string lhs, std::string rhs,
+                             size_t* cur_wr_offset,
+                             const size_t bytes_available,
+                             const size_t code_block_ix,
+                             const size_t statement_ix,
+                             const size_t ir_instruction_ix);
 
     uint8_t emit_IR_insn_ADD(std::string lhs_operand, std::string rhs_operand,
-                             std::string target);
+                             std::string target,
+                             size_t* cur_wr_offset,
+                             const size_t bytes_available,
+                             const size_t code_block_ix,
+                             const size_t statement_ix,
+                             const size_t ir_instruction_ix);
 
     uint8_t emit_IR_insn_SUB(std::string lhs_operand, std::string rhs_operand,
-                             std::string target);
+                             std::string target,
+                             size_t* cur_wr_offset,
+                             const size_t bytes_available,
+                             const size_t code_block_ix,
+                             const size_t statement_ix,
+                             const size_t ir_instruction_ix);
 
     uint8_t emit_IR_insn_MUL(std::string lhs_operand, std::string rhs_operand,
-                             std::string target);
+                             std::string target,
+                             size_t* cur_wr_offset,
+                             const size_t bytes_available,
+                             const size_t code_block_ix,
+                             const size_t statement_ix,
+                             const size_t ir_instruction_ix);
 
     uint8_t emit_IR_insn_DIV(std::string lhs_operand, std::string rhs_operand,
-                             std::string quotient, std::string remainder);
+                             std::string quotient, std::string remainder,
+                             size_t* cur_wr_offset,
+                             const size_t bytes_available,
+                             const size_t code_block_ix,
+                             const size_t statement_ix,
+                             const size_t ir_instruction_ix);
 };
 
 /* The main compilation driver chooses which IR generation quota to process. */
@@ -197,17 +277,26 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
         (std::vector<size_t> selected_IR_generation_quota)
 {
     uint8_t ret = 0;
-    size_t this_generator_used_arena_bytes = 0;
+    size_t this_generator_used_IR_arena_bytes = 0;
+    size_t this_generator_used_IR_dir_entries = 0;
 
-    IR_Generator my_IR_generator(this->Symbol_Table,
+    IR_Generator my_IR_generator(&(this->Symbol_Table),
                                  this->ast_arena,
-                                 this->statement_directory,
+                                 &(this->statement_directory),
                                  this->statement_directory_used_entries,
                                  this->IR_instructions_arena,
                                  this->IR_instructions_arena_size,
                                  this->IR_instructions_arena_free_region_offset,
                                  this->IR_instructions_arena_size,
-                                 &this_generator_used_arena_bytes,
+                                 &this_generator_used_IR_arena_bytes,
+                                 /* TODO: This won't be hardcoded to 0 when real
+                                  *       multithreaded arena IR instructions
+                                  *       generation gets implemented.
+                                  */
+                                 0,
+                                 this->IR_instructions_directory.size(),
+                                 &(this->IR_instructions_directory),
+                                 &this_generator_used_IR_dir_entries,
                                  selected_IR_generation_quota);
 
     ret = my_IR_generator.emit_IR();
@@ -224,7 +313,20 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
         return 1;
     }
 
-    this->IR_instructions_arena_used_bytes += this_generator_used_arena_bytes;
+    else
+    {
+        std::cout << "\n  ****  IR generation successful!  ****\n\n";
+        std::cout << "IR Instructions emitted: "
+                  << this_generator_used_IR_dir_entries << "\n";
+        std::cout << "IR Arena bytes used: "
+                  << this_generator_used_IR_arena_bytes << "\n";
+    }
+
+    this->IR_instructions_arena_used_bytes +=
+        this_generator_used_IR_arena_bytes;
+    this->IR_instructions_dir_used_entries +=
+        this_generator_used_IR_dir_entries;
+
     return 0;
 }
 
@@ -294,12 +396,21 @@ uint8_t IR_Generator::emit_IR(void)
             [[likely]]
             {
                 ret = emit_IR_for_assignment
-                            ((AST_Node_Statement_Assignment*)cur_stmt_ast_node);
-                if(ret)
+                           ((AST_Node_Statement_Assignment*)cur_stmt_ast_node,
+                             curr_quota_block_ix, statements_we_emitted_IR_for);
+                if(ret == 1)
+                [[unlikely]]
                 {
                     std::cout << "[INFO] Not enough Arena memory to emit IR for"
                                  " an assignment statement node.\n";
                     return 1;
+                }
+                else if(ret == 2)
+                [[unlikely]]
+                {
+                    std:: cout << "[INFO] Not enough entries in IR Instructions"
+                                  " Directory.\n";
+                    return 2;
                 }
             }
             else
@@ -381,40 +492,21 @@ uint8_t IR_Generator::emit_IR(void)
  *
  *         Check this LHS source variable's counter in its Symbol. Use current
  *         counter to produce the new LHS IR variable, eg. %a_2.
- *         Increment that source variable's counter in its Symbol object.
- *
- *    Data members to keep track of, use and update when needed:
- *
- *    std::unordered_map<std::string, Symbol>* Symbol_Table;
- *    uint8_t* ast_arena;
- *    std::vector<std::tuple<size_t, size_t, size_t>>* statement_directory;
- *    const size_t statement_directory_used_entries;
- *
- *    uint8_t*     IR_instructions_arena;
- *    const size_t IR_instructions_arena_size;
- *    const size_t IR_instructions_arena_free_region_offset;
- *
- *    size_t* IR_instructions_arena_used_bytes;
- *
- *    std::vector<size_t> IR_generation_quota;
- *
- *    size_t IR_intermediates_emitted;
- *    size_t u64_literals_seen;
- *    size_t IR_instructions_emitted;
- *    size_t count_statements_it_emitted_IR_for;
- *
- *    const encountered_u64_literals_array_init_size;
- *    std::vector<size_t> encountered_u64_literals_array;
+ *         Increment that source variable's counter in its Symbol object.*
  */
 uint8_t
-IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node)
+IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
+                                     const size_t code_block_ix,
+                                     const size_t statement_ix)
 {
     uint8_t assignment_rhs_expr_kind = stmt_node->rhs_expression->expr_kind_ix;
+    std::string assignment_lhs_src_var = stmt_node->lhs_identifier->symbol_name;
     uint8_t ret = 0;
     size_t  i;
     bool    literal_has_already_been_encountered = false;
     size_t  u64_literals_encountered_arr_cur_siz;
     size_t  wr_offset = *(this->IR_instructions_arena_used_bytes);
+    size_t  insns_emitted_for_this_stmt = 0;
     const size_t bytes_available = this->IR_instructions_arena_bytes_available;
 
     std::string ir_insn_target;
@@ -440,82 +532,159 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node)
 
         for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
         {
-            if(rhs_expr_u64_literal->value == this->encountered_u64_literals[i])
+            if(rhs_expr_u64_literal->value
+                == this->encountered_u64_literals_array[i])
             {
                 literal_has_already_been_encountered = true;
-                ir_insn_operand1 = "%%const_" + std::to_string(i);
+                ir_insn_operand1 = "%const_" + std::to_string(i);
                 break;
             }
         }
         if(literal_has_already_been_encountered == false)
         {
-            /* Emit an extra IR instruction that creates the auxilliary IR
-             * variable for this newly seen literal. */
-
-            /* Align if needed. */
-            while
-             ( ((uintptr_t)(IR_instructions_arena + wr_offset))
-               % alignof(ir_insn_equate) )
-            { ++wr_offset };
-
-            if(wr_offset + sizeof(ir_insn_equate) > bytes_available)
-            [[unlikely]]
-            { return 1; }
-
-            /* Ready to construct the object for the extra IR instruction. */
-
-            /* TODO: So, we can't just have IR instructions sitting around in
-             *       an Arena. Because how will we be able to traverse the arena
-             *       and find the IR instructions later? We won't know where
-             *       they even start because of potential empty bytes for
-             *       alignment requirements. We need a bookkeeping data
-             *       structure similar to the Statement Directory, except this
-             *       one will be the IR Instructions Directory. Each entry
-             *       ought to contain these things:
+            /* Emit an additional IR instruction creating an auxilliary
+             * IR variable to hold this literal, since we don't have one yet.
+             * Record the fact that we've seen this literal in the source by
+             * placing it in next entry of encountered_u64_literals_array.
              *
-             *       - Index of the Code Block this IR instruction belongs to;
-             *       - Index of the IR instruction within that Code Block;
-             *       - Offset into the IR Instructions Arena of the object;
+             * TODO: Isn't it weird that this array of encountered u64 literals
+             *       (and every other type of literal for that matter, later on)
+             *       is a data member of each spawned IR Generator object?
+             *       The IR variable storing a literal can be INDEPENDENTLY used
+             *       in all Code Blocks, so it should be part of the
+             *       IR Generation Orchestrator, a pointer to it ought to be
+             *       passed to each spawned IR Generator.
              *
-             *  Once I add this IR Instructions Directory to the IR generation
-             *  orchestrator and how it passes a pointer to it to the IR
-             *  generators that it spawn, I can finish writing the code below.
+             *       When multithreaded IR generation is added, so multiple
+             *       threads, they can ATOMICALLY increment the INDEX for the
+             *       next available entry. WARNING though: emplace, emplace_back
+             *       are NOT THREAD-SAFE, the vector's auto-resizing mechanism
+             *       is not thread-safe, so i have to manually use vec[ix] to
+             *       add the entry by each thread, and this will be added ONLY
+             *       AFTER each thread makes sure it's not writing past the
+             *       currently reserved max number of elements.
              *
-             *  I still won't be holding a pointer to the newly constructed
-             *  object anywhere. IDK how to construct an object at a specified
-             *  memory location without using NEW, but NEW always returns a
-             *  pointer to the constructed object, which I don't need in this
-             *  case. So look into ways of doing this without using NEW.
+             *       The following can be used for this:
              *
+             *       --- VISIBLE TO ALL THREADS: ---
+             *       std::atomic<size_t> my_atomic_ix = 0;
+             *
+             *       --- IN THE THREAD FUNCTION: ---
+             *       my_atomic_ix.fetch_add(num, SELECTED_MEMORY_ORDER);
+             *       vec[my_atomic_ix] = ADD_ENTRY();
+             *
+             *       This won't matter for having only singlethreaded IR
+             *       generation, but will when multithreaded IR generation is
+             *       added. Several things will need updating then, similar to
+             *       multithreaded AST generation, both are partially ready.
              */
-            if(new (IR_instructions_arena + wr_offset)
-                ir_insn_equate(std::string("%%const_") + std::to_string(u64_literals_encountered_arr_cur_siz)))
+            ir_insn_operand1 = std::string("%const_") +
+                        std::to_string(u64_literals_encountered_arr_cur_siz);
 
-            /* Finalize the first operand string of the main IR instruction. */
-            ir_insn_operand1 = std::string("%%const_") +
-                           std::to_string(u64_literals_encountered_arr_cur_siz);
+            ret = emit_IR_insn_EQU (ir_insn_operand1,
+                                    std::to_string(rhs_expr_u64_literal->value),
+                                    &wr_offset, bytes_available, code_block_ix,
+                                    statement_ix, insns_emitted_for_this_stmt);
 
+            /* TODO: Check that ALL functions that could run out of space in
+             *       an Arena and in a Directory or any other vairable-sized
+             *       data structure don't just return 1 in all error cases.
+             */
+            if(ret) [[unlikely]] { return ret; }
+
+            /* Place the newly recorded literal in the IR bookkeeping array. */
             this->encountered_u64_literals_array.emplace_back
                 (rhs_expr_u64_literal->value);
+
+            ++insns_emitted_for_this_stmt;
         }
 
+        /* Operand 1 of Case 1 is done. The only input operand for case 1.
+         * Now construct the string for LHS of this assignment IR instruction.
+         *
+         * To make the string ir_insn_target:
+         *
+         * Look at the counter in this source variable's Symbol object, use
+         * current counter, then increment counter (for use in the next IR
+         * assignment to this same source variable, to maintain SSA IR form).
+         */
+        ir_insn_target =
+               std::string("%") + assignment_lhs_src_var + std::string("_")
+             + std::to_string(stmt_node->lhs_identifier->SSA_IR_mangle_counter);
 
+        ret = emit_IR_insn_EQU
+                (ir_insn_target,
+                ir_insn_operand1,
+                &wr_offset, bytes_available, code_block_ix, statement_ix,
+                insns_emitted_for_this_stmt);
+
+        if(ret) [[unlikely]] { return ret; }
+
+        ++insns_emitted_for_this_stmt;
+        stmt_node->lhs_identifier->SSA_IR_mangle_counter += 1;
     }
 
     /* Case 2. Direct assignment from another source variable: a = b */
     else if(assignment_rhs_expr_kind == EXPR_KIND_IDENTIFIER)
     {
-
+        /* PLACEHOLDER, REMOVE THE ABORT WHEN I GET TO IMPLEMENTING THIS. */
+        std::abort();
     }
 
     /* Case 3. Assignment from a (possibly multi-level) binary operation. */
     else if(assignment_rhs_expr_kind == EXPR_KIND_BIN_OPERATION)
     {
-
+        /* PLACEHOLDER, REMOVE THE ABORT WHEN I GET TO IMPLEMENTING THIS. */
+        std::abort();
     }
 
     ++(this->count_statements_it_emitted_IR_for);
     ++(this->IR_instructions_emitted);
-    *(this->IR_instructions_arena_used_bytes) += wr_offset;
+    *(this->IR_instructions_arena_used_bytes) = wr_offset;
+    return 0;
+}
+
+uint8_t IR_Generator::emit_IR_insn_EQU(std::string lhs, std::string rhs,
+                                       size_t* cur_wr_offset,
+                                       const size_t bytes_available,
+                                       const size_t code_block_ix,
+                                       const size_t statement_ix,
+                                       const size_t ir_instruction_ix)
+{
+    /* Save byte offset into Arena locally from passed pointer. */
+    size_t wr_offset = *cur_wr_offset;
+
+    /* Align if needed and make sure the Arena has enough memory. */
+    while
+      ( ((uintptr_t)(IR_instructions_arena + wr_offset))
+       % alignof(ir_insn_equate) )
+    { ++wr_offset; };
+
+    if(wr_offset + sizeof(ir_insn_equate) > bytes_available)
+    [[unlikely]]
+    { return 1; }
+
+    /* Make sure the IR Instructions Directory has available entries. */
+    if(*(this->IR_instructions_dir_used_entries)
+         == this->IR_instructions_dir_available_entries)
+    [[unlikely]]
+    { return 2; }
+
+    /* Construct new IR instruction in IR Arena, advance byte offset tracker. */
+    new (IR_instructions_arena + wr_offset) ir_insn_equate(lhs, rhs);
+    wr_offset += sizeof(ir_insn_equate);
+
+    /* Put entry in IR Instructions Directory, advance used_entries counter. */
+    (*(this->IR_instructions_directory))
+        [*(this->IR_instructions_dir_used_entries)]
+        = IR_Instructions_Directory_Entry(code_block_ix, statement_ix,
+                                          ir_instruction_ix,
+                                          wr_offset - sizeof(ir_insn_equate),
+                                          IR_INSN_EQUATE);
+
+    ++(*(this->IR_instructions_dir_used_entries));
+
+    /* Update passed pointer to Arena byte offset. */
+    *cur_wr_offset = wr_offset;
     return 0;
 }

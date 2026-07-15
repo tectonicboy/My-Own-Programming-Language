@@ -1,8 +1,14 @@
+constexpr size_t IR_INSN_EQUATE = 1;
+constexpr size_t IR_INSN_ADD    = 2;
+constexpr size_t IR_INSN_SUB    = 3;
+constexpr size_t IR_INSN_MUL    = 4;
+constexpr size_t IR_INSN_DIV    = 5;
 
 /*----------------------------------------------------------------------------*/
 class ir_insn_equate {
 
 public:
+
     std::string lhs;
     std::string rhs;
 

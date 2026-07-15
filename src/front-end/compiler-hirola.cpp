@@ -1,3 +1,4 @@
+#include <new>
 #include <string>
 #include <vector>
 #include <array>
@@ -15,11 +16,25 @@
 #include "lexer.h"
 #include "ast.h"
 #include "parser.h"
+#include "../middle-end/ir-instructions.hpp"
+#include "../middle-end/ir-generator.hpp"
 
 int main()
 {
     struct timespec tv1, tv2;
 
+    std::string first_program =
+    "BLOCK_START PROGRAM\n"
+    "a = 5;\n"
+    "b = 7;\n"
+    "c = 9;\n"
+    "a = 5;\n"
+    "a = 7;\n"
+    "b = 9;\n"
+    "d = 5;\n"
+    "BLOCK_END";
+
+/*
     std::string first_program =
         "BLOCK_START PROGRAM\n"
         "x = 5;\n"
@@ -27,7 +42,7 @@ int main()
         "kk = ( (base * 1000000) - (x * x));\n"
         "c = ( (x - (base * base)) / kk );\n"
         "BLOCK_END";
-
+*/
 /*
 std::string first_program =
     "BLOCK_START PROGRAM\n"
@@ -171,15 +186,51 @@ std::string first_program =
               << ((tv2.tv_nsec - tv1.tv_nsec) / (double)1000.0)
               << " microseconds.\n\n";
 
-    std::cout << "Printing each Assignment Statement AST Node on new lines:\n";
+    std::cout << "Reconstructing the source program from the AST:\n";
 
-    for(size_t i = 0;
-        i < my_parsing_orchestrator.statement_directory_used_entries;
-        ++i)
+    size_t entries = my_parsing_orchestrator.statement_directory_used_entries;
+    size_t arena_offset;
+    AST_Node_Statement_Assignment* stmt_ast_node = nullptr;
+
+    for(size_t i = 0; i < entries; ++i)
     {
-        ((AST_Node_Statement_Assignment*)(my_parsing_orchestrator.ast_arena + std::get<STMT_DIR_NODE_ARENA_OFFSET>(my_parsing_orchestrator.statement_directory[i]) ))
-        ->print_node();
+        arena_offset = std::get<STMT_DIR_NODE_ARENA_OFFSET>
+                        (my_parsing_orchestrator.statement_directory[i]);
+
+        stmt_ast_node = (AST_Node_Statement_Assignment*)
+                          (my_parsing_orchestrator.ast_arena + arena_offset);
+
+        stmt_ast_node->print_node();
+
         std::cout << "\n";
+    }
+
+    IR_Generation_Orchestrator my_ir_generation_orchestrator
+        (std::move(my_parsing_orchestrator.Symbol_Table),
+         my_parsing_orchestrator.ast_arena,
+         std::move(my_parsing_orchestrator.statement_directory),
+         my_parsing_orchestrator.statement_directory_used_entries,
+         std::move(parsing_quotas));
+
+    my_ir_generation_orchestrator.spawn_IR_generator
+        (my_ir_generation_orchestrator.IR_generation_quotas[0]);
+
+    entries = my_ir_generation_orchestrator.IR_instructions_dir_used_entries;
+    IR_Instructions_Directory_Entry* entry;
+    size_t which_ir_insn;
+    uint8_t* arena = my_ir_generation_orchestrator.IR_instructions_arena;
+    ir_insn_equate* insn_equ;
+
+    for(size_t i = 0; i < entries; ++i)
+    {
+        entry = &(my_ir_generation_orchestrator.IR_instructions_directory[i]);
+        arena_offset = entry->ir_insn_arena_offset;
+        which_ir_insn = entry->which_ir_instruction;
+        if(which_ir_insn == IR_INSN_EQUATE)
+        {
+            insn_equ = (ir_insn_equate*)(arena + arena_offset);
+            insn_equ->print_ir_insn();
+        }
     }
 
     return 0;

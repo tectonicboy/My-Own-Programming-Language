@@ -112,7 +112,7 @@ public:
     /* This will be more complicated when types and functions are added. */
     void print_symbol_type(void) const
     {
-        std::cout << type;
+        std::cout << symbol_type;
     }
 };
 /*----------------------------------------------------------------------------*/
