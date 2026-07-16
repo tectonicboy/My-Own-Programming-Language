@@ -510,7 +510,8 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
     size_t  wr_offset = *(this->IR_instructions_arena_used_bytes);
     size_t  insns_emitted_for_this_stmt = 0;
     const size_t bytes_available = this->IR_instructions_arena_bytes_available;
-
+    uint8_t binop_lhs_expr_kind;
+    uint8_t binop_rhs_expr_kind;
     std::string ir_insn_target;
     std::string ir_insn_operand1;
     std::string ir_insn_operand2;
@@ -648,8 +649,79 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
     /* Case 3. Assignment from a (possibly multi-level) binary operation. */
     else if(assignment_rhs_expr_kind == EXPR_KIND_BIN_OPERATION)
     {
-        /* PLACEHOLDER, REMOVE THE ABORT WHEN I GET TO IMPLEMENTING THIS. */
-        std::abort();
+        rhs_expr_binop = (AST_Node_Expr_BinOp*)(stmt_node->rhs_expression);
+
+        /* Operand 1: might be a literal, a symbol, or a nested BinOp. */
+
+        /* if it's a literal, do the same thing that case 1. does. */
+
+        binop_lhs_expr_kind = rhs_expr_binop->lhs_expression->expr_kind_ix;
+
+        if(binop_lhs_expr_kind == EXPR_KIND_UINT64_LITERAL)
+        {
+            /* Look for the u64 literal in the array of already seen ones. */
+            u64_literals_encountered_arr_cur_siz =
+                this->encountered_u64_literals_array.size();
+
+            for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
+            {
+                if(rhs_expr_binop->lhs_expression->value
+                    == this->encountered_u64_literals_array[i])
+                {
+                    literal_has_already_been_encountered = true;
+                    ir_insn_operand1 = "%const_" + std::to_string(i);
+                    break;
+                }
+            }
+            if(literal_has_already_been_encountered == false)
+            {
+                ir_insn_operand1 = std::string("%const_") +
+                           std::to_string(u64_literals_encountered_arr_cur_siz);
+
+                ret = emit_IR_insn_EQU
+                 (ir_insn_operand1,
+                  std::to_string(rhs_expr_binop->lhs_expression->value),
+                  &wr_offset, bytes_available, code_block_ix, statement_ix,
+                  insns_emitted_for_this_stmt);
+
+                if(ret) [[unlikely]] { return ret; }
+
+                /* Place newly recorded literal in the IR bookkeeping array. */
+                this->encountered_u64_literals_array.emplace_back
+                    (rhs_expr_binop->lhs_expression->value);
+
+                ++insns_emitted_for_this_stmt;
+            }
+        }
+        /* if it's a source variable, do what case 2. does. */
+        else if(binop_lhs_expr_kind == EXPR_KIND_IDENTIFIER)
+        {
+            /* START: Code copied from case 2. */
+            assignment_rhs_var1 =
+                rhs_expr_binop->lhs_expression->symbol->symbol_name;
+
+            ir_insn_operand1 =   std::string("%") + assignment_rhs_var1
+                               + std::string("_") + std::to_string
+            (rhs_expr_binop->lhs_expression->symbol->SSA_IR_mangle_counter - 1);
+        }
+        /* If it's a BinOp, process that in its own recursive function. It might
+         * not have to recurse at all if it's just like a = ((b + c) + 5), in
+         * any case when it returns to here, it will tell us the %_temp_N
+         * counter that it stored its top-level BinOp in, so we can use it as
+         * our rhs_var1 for this assignment statement's IR instruction.
+         *
+         * Remember, this call is only for when an operand of the assignment
+         * RHS's BinOp is itself a BinOp. For something like a = (b + 5),
+         * this function here handles it on its own. In other words, if we
+         * are calling this, we already know the assignment statement has a
+         * NESTED binary operation: The assignment's RHS is a BinOp AND that
+         * BinOp's LHS is itself a BinOp and we don't know how deep it goes,
+         * the recursive function we call here will handle that.
+         */
+        this->emit_auxilliary_IR_for_nested_binop();
+
+
+        /* Operand 2: might be a literal, a symbol, or a nested BinOp. */
     }
 
     ++(this->count_statements_it_emitted_IR_for);
