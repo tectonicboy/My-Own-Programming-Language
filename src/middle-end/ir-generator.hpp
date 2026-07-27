@@ -113,7 +113,41 @@ public:
     uint8_t spawn_IR_generator(std::vector<size_t> IR_generation_quota);
 };
 
-/* Receives from an IR Generation Orchestrator:
+/*
+ * TODO: Isn't it weird that this array of encountered u64 literals
+ *       (and every other type of literal for that matter, later on)
+ *       is a data member of each spawned IR Generator object?
+ *       The IR variable storing a literal can be INDEPENDENTLY used
+ *       in all Code Blocks, so it should be part of the
+ *       IR Generation Orchestrator, a pointer to it ought to be
+ *       passed to each spawned IR Generator.
+ *
+ *       When multithreaded IR generation is added, so multiple
+ *       threads, they can ATOMICALLY increment the INDEX for the
+ *       next available entry. WARNING though: emplace, emplace_back
+ *       are NOT THREAD-SAFE, the vector's auto-resizing mechanism
+ *       is not thread-safe, so i have to manually use vec[ix] to
+ *       add the entry by each thread, and this will be added ONLY
+ *       AFTER each thread makes sure it's not writing past the
+ *       currently reserved max number of elements.
+ *
+ *       The following can be used for this:
+ *
+ *       --- VISIBLE TO ALL THREADS: ---
+ *       std::atomic<size_t> my_atomic_ix = 0;
+ *
+ *       --- IN THE THREAD FUNCTION: ---
+ *       my_atomic_ix.fetch_add(num, SELECTED_MEMORY_ORDER);
+ *       vec[my_atomic_ix] = ADD_ENTRY();
+ *
+ *       This won't matter for having only singlethreaded IR
+ *       generation, but will when multithreaded IR generation is
+ *       added. Several things will need updating then, similar to
+ *       multithreaded AST generation, both are partially ready.
+ */
+
+/*
+ * Receives from an IR Generation Orchestrator:
  *
  *  - Quota: vector<size_t> of block indices whose AST statements to emit IR of.
  *  - Populated Auxilliary Code Block Statement Directory
@@ -509,31 +543,43 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
                                      const size_t code_block_ix,
                                      const size_t statement_ix)
 {
+    /* Local: Grab returns of called functions to handle/propagate errors. */
+    uint8_t ret = 0;
+
+    /* Local: For loop iterations. */
+    size_t i;
+
+    /* Locals: Bookkeeping. */
+    bool         literal_has_already_been_encountered = false;
+    size_t       u64_literals_encountered_arr_cur_siz;
+    size_t       wr_offset = *(this->IR_instructions_arena_used_bytes);
+    size_t       insns_emitted_for_this_stmt = 0;
+    const size_t bytes_available = this->IR_instructions_arena_bytes_available;
+
+    /* The rest: Function local temporaries for convenience. */
+
+    /* Always used: */
     uint8_t assignment_rhs_expr_kind = stmt_node->rhs_expression->expr_kind_ix;
     std::string assignment_lhs_src_var = stmt_node->lhs_identifier->symbol_name;
-    std::string assignment_rhs_var1;
-    std::string assignment_rhs_var2;
-    uint8_t ret = 0;
-    size_t  i;
-    bool    literal_has_already_been_encountered = false;
-    size_t  u64_literals_encountered_arr_cur_siz;
-    size_t  wr_offset = *(this->IR_instructions_arena_used_bytes);
-    size_t  insns_emitted_for_this_stmt = 0;
-    const size_t bytes_available = this->IR_instructions_arena_bytes_available;
-    uint8_t binop_lhs_expr_kind;
-    uint8_t binop_rhs_expr_kind;
     std::string ir_insn_target;
     std::string ir_insn_operand1;
-    std::string ir_insn_operand2;
-
+    size_t name_mangle_ix;
     /* RHS of each assignment is an expression of one of these kinds: */
     AST_Node_Expr_BinOp*          rhs_expr_binop       = nullptr;
     AST_Node_Expr_UINT64_Literal* rhs_expr_u64_literal = nullptr;
     AST_Node_Expr_Identifier*     rhs_expr_identifier  = nullptr;
+    /* May or may not have these. Assignments from literals don't have them. */
+    uint64_t literal_val;
+    std::string assignment_rhs_var1;
+    std::string assignment_rhs_var2;
+    /* Only have these if the assignment RHS is a BinOp. */
+    std::string ir_insn_operand2;
+    uint8_t binop_lhs_expr_kind;
+    uint8_t binop_rhs_expr_kind;
 
-    /* Check which of the 3 cases we're dealing with by looking at the RHS. */
+    /* Look at assignment RHS: which of the 3 cases are we dealing with? */
 
-    /* Case 1. Direct assignment from a literal: a = 5 */
+    /* Case 1. Direct assignment from a literal, e.g.  my_var = 5 */
     if(assignment_rhs_expr_kind == EXPR_KIND_UINT64_LITERAL)
     {
         rhs_expr_u64_literal =
@@ -549,51 +595,28 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
                 == this->encountered_u64_literals_array[i])
             {
                 literal_has_already_been_encountered = true;
-                ir_insn_operand1 = "%const_" + std::to_string(i);
                 break;
             }
         }
+
+        /* This works even if the literal wasn't found, in which case, i simply
+         * ends up equal to u64_literals_encountered_arr_cur_siz.
+         */
+        ir_insn_operand1 = "%const_" + std::to_string(i);
+
+        /* If this literal has never been encountered yet in the source code,
+         * emit an additional IR instruction creating an auxilliary
+         * IR variable to hold this literal, since we don't have one yet.
+         * Record the fact that we've seen this literal in the source by
+         * placing it in next entry of encountered_u64_literals_array.
+         */
         if(literal_has_already_been_encountered == false)
         {
             /* Emit an additional IR instruction creating an auxilliary
              * IR variable to hold this literal, since we don't have one yet.
              * Record the fact that we've seen this literal in the source by
              * placing it in next entry of encountered_u64_literals_array.
-             *
-             * TODO: Isn't it weird that this array of encountered u64 literals
-             *       (and every other type of literal for that matter, later on)
-             *       is a data member of each spawned IR Generator object?
-             *       The IR variable storing a literal can be INDEPENDENTLY used
-             *       in all Code Blocks, so it should be part of the
-             *       IR Generation Orchestrator, a pointer to it ought to be
-             *       passed to each spawned IR Generator.
-             *
-             *       When multithreaded IR generation is added, so multiple
-             *       threads, they can ATOMICALLY increment the INDEX for the
-             *       next available entry. WARNING though: emplace, emplace_back
-             *       are NOT THREAD-SAFE, the vector's auto-resizing mechanism
-             *       is not thread-safe, so i have to manually use vec[ix] to
-             *       add the entry by each thread, and this will be added ONLY
-             *       AFTER each thread makes sure it's not writing past the
-             *       currently reserved max number of elements.
-             *
-             *       The following can be used for this:
-             *
-             *       --- VISIBLE TO ALL THREADS: ---
-             *       std::atomic<size_t> my_atomic_ix = 0;
-             *
-             *       --- IN THE THREAD FUNCTION: ---
-             *       my_atomic_ix.fetch_add(num, SELECTED_MEMORY_ORDER);
-             *       vec[my_atomic_ix] = ADD_ENTRY();
-             *
-             *       This won't matter for having only singlethreaded IR
-             *       generation, but will when multithreaded IR generation is
-             *       added. Several things will need updating then, similar to
-             *       multithreaded AST generation, both are partially ready.
              */
-            ir_insn_operand1 = std::string("%const_") +
-                        std::to_string(u64_literals_encountered_arr_cur_siz);
-
             ret = emit_IR_insn_EQU (ir_insn_operand1,
                                     std::to_string(rhs_expr_u64_literal->value),
                                     &wr_offset, bytes_available, code_block_ix,
@@ -612,9 +635,11 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
             ++insns_emitted_for_this_stmt;
         }
 
+        name_mangle_ix = stmt_node->lhs_identifier->SSA_IR_mangle_counter;
+
         ir_insn_target =
                std::string("%") + assignment_lhs_src_var + std::string("_")
-             + std::to_string(stmt_node->lhs_identifier->SSA_IR_mangle_counter);
+             + std::to_string(name_mangle_ix);
 
         ret = emit_IR_insn_EQU
                 (ir_insn_target,
@@ -635,20 +660,19 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
             (AST_Node_Expr_Identifier*)(stmt_node->rhs_expression);
 
         assignment_rhs_var1 = rhs_expr_identifier->symbol->symbol_name;
+        name_mangle_ix = rhs_expr_identifier->symbol->SSA_IR_mangle_counter - 1;
 
         ir_insn_operand1 =   std::string("%") + assignment_rhs_var1
-                           + std::string("_") + std::to_string
-                       (rhs_expr_identifier->symbol->SSA_IR_mangle_counter - 1);
+                           + std::string("_") + std::to_string(name_mangle_ix);
+
+        name_mangle_ix = stmt_node->lhs_identifier->SSA_IR_mangle_counter;
 
         ir_insn_target =   std::string("%") + assignment_lhs_src_var
-                         + std::string("_") + std::to_string
-                             (stmt_node->lhs_identifier->SSA_IR_mangle_counter);
+                         + std::string("_") + std::to_string(name_mangle_ix);
 
         ret = emit_IR_insn_EQU
-                (ir_insn_target,
-                ir_insn_operand1,
-                &wr_offset, bytes_available, code_block_ix, statement_ix,
-                insns_emitted_for_this_stmt);
+                (ir_insn_target, ir_insn_operand1, &wr_offset, bytes_available,
+                 code_block_ix, statement_ix,insns_emitted_for_this_stmt);
 
         if(ret) [[unlikely]] { return ret; }
 
@@ -660,9 +684,10 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
     else if(assignment_rhs_expr_kind == EXPR_KIND_BIN_OPERATION)
     {
         /* Operand 1: might be a literal, a symbol, or a nested BinOp. */
-        rhs_expr_binop = (AST_Node_Expr_BinOp*)(stmt_node->rhs_expression);
+        rhs_expr_binop      = (AST_Node_Expr_BinOp*)(stmt_node->rhs_expression);
         binop_lhs_expr_kind = rhs_expr_binop->lhs_expression->expr_kind_ix;
-        literal_has_already_been_encountered == false;
+
+        literal_has_already_been_encountered = false;
 
         /* if it's a literal, do the same thing that case 1. does. */
         if(binop_lhs_expr_kind == EXPR_KIND_UINT64_LITERAL)
@@ -677,20 +702,18 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
                     == this->encountered_u64_literals_array[i])
                 {
                     literal_has_already_been_encountered = true;
-                    ir_insn_operand1 = "%const_" + std::to_string(i);
                     break;
                 }
             }
+
+            ir_insn_operand1 = "%const_" + std::to_string(i);
+            literal_val = rhs_expr_binop->lhs_expression->value;
             if(literal_has_already_been_encountered == false)
             {
-                ir_insn_operand1 = std::string("%const_") +
-                           std::to_string(u64_literals_encountered_arr_cur_siz);
-
                 ret = emit_IR_insn_EQU
-                 (ir_insn_operand1,
-                  std::to_string(rhs_expr_binop->lhs_expression->value),
-                  &wr_offset, bytes_available, code_block_ix, statement_ix,
-                  insns_emitted_for_this_stmt);
+                    (ir_insn_operand1, std::to_string(literal_val), &wr_offset,
+                    bytes_available, code_block_ix, statement_ix,
+                    insns_emitted_for_this_stmt);
 
                 if(ret) [[unlikely]] { return ret; }
 
@@ -707,9 +730,12 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
             assignment_rhs_var1 =
                 rhs_expr_binop->lhs_expression->symbol->symbol_name;
 
-            ir_insn_operand1 =   std::string("%") + assignment_rhs_var1
-                               + std::string("_") + std::to_string
-            (rhs_expr_binop->lhs_expression->symbol->SSA_IR_mangle_counter - 1);
+            name_mangle_ix =
+              rhs_expr_binop->lhs_expression->symbol->SSA_IR_mangle_counter - 1;
+
+            ir_insn_operand1 = std::string("%") + assignment_rhs_var1
+                             + std::string("_")
+                             + std::to_string(name_mangle_ix);
         }
         /* If operand 1 is itself a BinOp, process that in its own recursive
          * function. It might not have to recurse at all if it's just like
@@ -725,12 +751,12 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
          * BinOp's LHS is itself a BinOp and we don't know how deep it goes,
          * the recursive function we call here will handle that.
          *
-         * TODO: Implement the recursive function called here.
+         * TODO: Implement the function emit_auxilliary_IR_for_nested_binop().
          */
         else if(binop_lhs_expr_kind == EXPR_KIND_BIN_OPERATION)
         {
-            this->emit_auxilliary_IR_for_nested_binop();
-
+            this->emit_auxilliary_IR_for_nested_binop(&insns_emitted_for_this_stmt, rhs_expr_binop->lhs_expression);
+            ++insns_emitted_for_this_stmt;
             /* Construct the string ir_insn_operand1 here now. */
         }
         /* Operand 2: might be a literal, a symbol, or a nested BinOp. */
@@ -750,15 +776,14 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
                     == this->encountered_u64_literals_array[i])
                 {
                     literal_has_already_been_encountered = true;
-                    ir_insn_operand2 = "%const_" + std::to_string(i);
                     break;
                 }
             }
+
+            ir_insn_operand2 = "%const_" + std::to_string(i);
+
             if(literal_has_already_been_encountered == false)
             {
-                ir_insn_operand2 = std::string("%const_") +
-                           std::to_string(u64_literals_encountered_arr_cur_siz);
-
                 ret = emit_IR_insn_EQU
                  (ir_insn_operand2,
                   std::to_string(rhs_expr_binop->rhs_expression->value),
@@ -780,26 +805,33 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
             assignment_rhs_var2 =
                 rhs_expr_binop->rhs_expression->symbol->symbol_name;
 
+            name_mangle_ix =
+              rhs_expr_binop->rhs_expression->symbol->SSA_IR_mangle_counter - 1;
+
             ir_insn_operand2 =   std::string("%") + assignment_rhs_var2
-                               + std::string("_") + std::to_string
-            (rhs_expr_binop->rhs_expression->symbol->SSA_IR_mangle_counter - 1);
+                               + std::string("_")
+                               + std::to_string(name_mangle_ix);
         }
         /* BinOp RHS is itself a BinOp: process it in its own recursive func.
          *
-         * TODO: Implement the recursive function called here.
+         * TODO: Implement the function emit_auxilliary_IR_for_nested_binop().
          */
-        else if(binop_lhs_expr_kind == EXPR_KIND_BIN_OPERATION)
+        else if(binop_rhs_expr_kind == EXPR_KIND_BIN_OPERATION)
         {
-            this->emit_auxilliary_IR_for_nested_binop();
+            this->emit_auxilliary_IR_for_nested_binop(&insns_emitted_for_this_stmt, rhs_expr_binop->rhs_expression);
 
             /* Construct the string ir_insn_operand2 here now. */
         }
 
-        /* The other 2 cases for the assignment statement syntax already
-         * produced the string for this IR instruction's target variable
-         * and emitted the final IR instruction. Do that here too, now that
-         * we have the IR variables containing both LHS and RHS of the BinOp
-         * that was on the RHS of the assignment statement.
+        /* The other 2 cases for the assignment statement syntax (assignment RHS
+         * is a symbol or is a literal) already produced the string for this IR
+         * instruction's target variable and emitted the IR instruction. Do that
+         * here too, now that we have the IR variables containing both LHS and
+         * RHS of the BinOp that was on the RHS of the assignment statement.
+         *
+         * TODO: Emitting the target IR variable and the IR instruction feel
+         * like they should have the code for doing it only once, at the end of
+         * this function here.
          */
     }
 
@@ -808,6 +840,220 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
     *(this->IR_instructions_arena_used_bytes) = wr_offset;
     return 0;
 }
+
+/* This function will emit 1 auxilliary IR instruction per call, storing the
+ * result of the binary operation. If, inside the nested BinOp, one of the
+ * sides is itself another nested BinOp, recursively call itself. Additional
+ * IR instructions are emitted to store never-before-seen literals into IR
+ * variables.
+ */
+uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
+            (size_t*      passed_wr_offset, const size_t bytes_available,
+             const size_t code_block_ix,    const size_t statement_ix,
+             size_t* passed_insns_emitted_for_stmt, AST_Node_Expr_BinOp* binop)
+{
+    /* Local: Grab returns of called functions to handle/propagate errors. */
+    uint8_t ret = 0;
+
+    /* Local: For loop iterations. */
+    size_t i;
+
+    /* Locals: Bookkeeping. */
+    bool   literal_has_already_been_encountered;
+    size_t u64_literals_encountered_arr_cur_siz;
+    size_t insns_emitted_for_this_stmt = *passed_insns_emitted_for_stmt;
+    size_t wr_offset = *cur_wr_offset;
+
+    /* The rest: Function local temporaries for convenience and readability. */
+
+    /* Always used: */
+    std::string ir_insn_target;
+    std::string ir_insn_operand1;
+    std::string ir_insn_operand2;
+    uint8_t     binop_lhs_expr_kind;
+    uint8_t     binop_rhs_expr_kind;
+    size_t      name_mangle_ix;
+    /* Each side of a BinOp is an expression of one of these 3 kinds: */
+    AST_Node_Expr_BinOp*          binop_rhs_expr_binop       = nullptr;
+    AST_Node_Expr_BinOp*          binop_lhs_expr_binop       = nullptr;
+    AST_Node_Expr_UINT64_Literal* binop_rhs_expr_u64_literal = nullptr;
+    AST_Node_Expr_UINT64_Literal* binop_lhs_expr_u64_literal = nullptr;
+    AST_Node_Expr_Identifier*     binop_rhs_expr_identifier  = nullptr;
+    AST_Node_Expr_Identifier*     binop_lhs_expr_identifier  = nullptr;
+    /* Have these only if a side of this BinOp is a source variable. */
+    std::string binop_rhs_var;
+    std::string binop_lhs_var;
+    /* Have this only if a side of this BinOp is a literal. */
+    uint64_t literal_val;
+
+    /* BinOp LHS: 3 cases. */
+
+    literal_has_already_been_encountered = false;
+    binop_lhs_expr_kind = binop->lhs_expression->expr_kind_ix;
+
+    /* if it's a literal: */
+    if(binop_lhs_expr_kind == EXPR_KIND_UINT64_LITERAL)
+    {
+        /* Look for the u64 literal in the array of already seen ones. */
+
+        u64_literals_encountered_arr_cur_siz =
+            this->encountered_u64_literals_array.size();
+
+        for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
+        {
+            if(binop->lhs_expression->value
+                == this->encountered_u64_literals_array[i])
+            {
+                literal_has_already_been_encountered = true;
+                break;
+            }
+        }
+
+        ir_insn_operand1 = "%const_" + std::to_string(i);
+
+        if(literal_has_already_been_encountered == false)
+        {
+            ret = emit_IR_insn_EQU
+             (ir_insn_operand1,
+              std::to_string(binop->lhs_expression->value),
+              &wr_offset, bytes_available, code_block_ix, statement_ix,
+              insns_emitted_for_this_stmt);
+
+            if(ret) [[unlikely]] { return ret; }
+
+            /* Place newly recorded literal in the IR bookkeeping array. */
+            this->encountered_u64_literals_array.emplace_back
+                (binop->lhs_expression->value);
+
+            ++insns_emitted_for_this_stmt;
+        }
+    }
+    /* if it's a source variable: */
+    else if(binop_lhs_expr_kind == EXPR_KIND_IDENTIFIER)
+    {
+        binop_lhs_var = binop->lhs_expression->symbol->symbol_name;
+
+        name_mangle_ix =
+          binop->lhs_expression->symbol->SSA_IR_mangle_counter - 1;
+
+        ir_insn_operand1 =   std::string("%") + binop_lhs_var
+                           + std::string("_")
+                           + std::to_string(name_mangle_ix);
+    }
+    /* if it's a nested binop: */
+    else if(binop_lhs_expr_kind == EXPR_KIND_BIN_OPERATION)
+    {
+        this->emit_auxilliary_IR_for_nested_binop
+                (&wr_offset, bytes_available, code_block_ix, statement_ix,
+                 &insns_emitted_for_this_stmt, binop->lhs_expression);
+
+        ++insns_emitted_for_this_stmt;
+
+        /* Construct the string ir_insn_operand1 here now. It will be an aux IR
+         * variable with the current IR Generator's held counter for them.
+         *
+         * Minus one because the recursed call we just did placed that nested
+         * BinOp's result in an auxilliary %_temp_X IR variable already and
+         * bumped the counter of intermediates emitted by this IR Generator.
+         */
+        ir_insn_operand1 =   std::string("%_temp_")
+                           + std::to_string(this->IR_intermediates_emitted - 1);
+    }
+
+    /*------------------------------------------------------------------------*/
+
+    /* BinOp RHS: 3 cases. */
+
+    literal_has_already_been_encountered = false;
+    binop_rhs_expr_kind = binop->rhs_expression->expr_kind_ix;
+
+    /* if it's a literal: */
+    if(binop_rhs_expr_kind == EXPR_KIND_UINT64_LITERAL)
+    {
+        /* Look for the u64 literal in the array of already seen ones. */
+        u64_literals_encountered_arr_cur_siz =
+            this->encountered_u64_literals_array.size();
+
+        for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
+        {
+            if(binop->rhs_expression->value
+                == this->encountered_u64_literals_array[i])
+            {
+                literal_has_already_been_encountered = true;
+                break;
+            }
+        }
+
+        ir_insn_operand2 = "%const_" + std::to_string(i);
+
+        if(literal_has_already_been_encountered == false)
+        {
+            ret = emit_IR_insn_EQU
+             (ir_insn_operand2,
+              std::to_string(binop->rhs_expression->value),
+              &wr_offset, bytes_available, code_block_ix, statement_ix,
+              insns_emitted_for_this_stmt);
+
+            if(ret) [[unlikely]] { return ret; }
+
+            /* Place newly recorded literal in the IR bookkeeping array. */
+            this->encountered_u64_literals_array.emplace_back
+                (binop->rhs_expression->value);
+
+            ++insns_emitted_for_this_stmt;
+        }
+    }
+
+    /* if it's a source variable: */
+    else if(binop_rhs_expr_kind == EXPR_KIND_IDENTIFIER)
+    {
+        binop_rhs_var = binop->rhs_expression->symbol->symbol_name;
+
+        name_mangle_ix =
+          binop->rhs_expression->symbol->SSA_IR_mangle_counter - 1;
+
+        ir_insn_operand2 =   std::string("%") + binop_rhs_var
+                           + std::string("_")
+                           + std::to_string(name_mangle_ix);
+    }
+    /* if it's a nested binop: */
+    else if(binop_rhs_expr_kind == EXPR_KIND_BIN_OPERATION)
+    {
+        this->emit_auxilliary_IR_for_nested_binop
+                (&wr_offset, bytes_available, code_block_ix, statement_ix,
+                 &insns_emitted_for_this_stmt, binop->rhs_expression);
+
+        ++insns_emitted_for_this_stmt;
+
+        /* Construct the string ir_insn_operand1 here now. It will be an aux IR
+         * variable with the current IR Generator's held counter for them.
+         *
+         * Minus one because the recursed call we just did placed that nested
+         * BinOp's result in an auxilliary %_temp_X IR variable already and
+         * bumped the counter of intermediates emitted by this IR Generator.
+         */
+        ir_insn_operand2 =   std::string("%_temp_")
+                           + std::to_string(this->IR_intermediates_emitted - 1);
+    }
+
+    /* OK. Now we have IR operands 1 and 2. Now construct the IR instruction
+     * target and emit the auxilliary IR instruction.
+     *
+     * DO NOT bump insns_emitted_for_this_stmt.
+     */
+
+    ir_insn_target =   std::string("%_temp_")
+                     + std::to_string(this->IR_intermediates_emitted);
+
+    ++this->IR_intermediates_emitted;
+
+    /* Update Arena byte offset and counter for IR instructions emitted for the
+     * source statement currently being processed, via passed pointers.
+     */
+    *passed_insns_emitted_for_stmt = insns_emitted_for_this_stmt;
+    *passed_wr_offset = wr_offset;
+}
+
 
 uint8_t IR_Generator::emit_IR_insn_EQU(std::string lhs, std::string rhs,
                                        size_t* cur_wr_offset,
@@ -839,7 +1085,7 @@ uint8_t IR_Generator::emit_IR_insn_EQU(std::string lhs, std::string rhs,
     new (IR_instructions_arena + wr_offset) ir_insn_equate(lhs, rhs);
     wr_offset += sizeof(ir_insn_equate);
 
-    /* Put entry in IR Instructions Directory, advance used_entries counter. */
+    /* Put entry in IR Instructions Directory, bump used_entries counter. */
     (*(this->IR_instructions_directory))
         [*(this->IR_instructions_dir_used_entries)]
         = IR_Instructions_Directory_Entry(code_block_ix, statement_ix,

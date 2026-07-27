@@ -92,16 +92,15 @@ public:
     std::string lhs_operand;
     std::string rhs_operand;
     std::string quotient;
-    std::string remainder;
 
     explicit ir_insn_div(std::string lhs_operand_in, std::string rhs_operand_in,
-                         std::string quotient_in, std::string remainder_in)
+                         std::string quotient_in)
     : lhs_operand(lhs_operand_in), rhs_operand(rhs_operand_in),
-      quotient(quotient_in), remainder(remainder_in) {}
+      quotient(quotient_in) {}
 
     void print_ir_insn(void) const
     {
-        std::cout << quotient << ", " << remainder << " = "
+        std::cout << quotient << " = "
                   << lhs_operand << " / " << rhs_operand << "\n";
     }
 };
