@@ -254,9 +254,6 @@ public:
 
     uint8_t emit_IR(void);
 
-    uint8_t emit_IR_for_block(size_t ast_node_first_statement_index,
-                              size_t block_index_in_statement_dir);
-
     uint8_t emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
                                      const size_t code_block_ix,
                                      const size_t statement_ix);
@@ -265,52 +262,46 @@ public:
      * be emitted to store the result of a nested binary operation. More of them
      * if the input BinOp AST Node contains more nested BinOps.
      */
-    uint8_t emit_auxilliary_IR_for_nested_binop()
+    uint8_t emit_auxilliary_IR_for_nested_binop
+            (size_t*      passed_wr_offset, const size_t bytes_available,
+             const size_t code_block_ix,    const size_t statement_ix,
+             size_t* passed_insns_emitted_for_stmt, AST_Node_Expr_BinOp* binop);
 
     /* The IR instruction emitter functions will handle any padding bytes
      * because of alignment requirements themselves. Therefore, output pointer
      * passed to it should be at the immediate free byte where the last IR
      * instruction's object ends in the arena.
      */
-    uint8_t emit_IR_insn_EQU(std::string lhs, std::string rhs,
-                             size_t* cur_wr_offset,
-                             const size_t bytes_available,
-                             const size_t code_block_ix,
-                             const size_t statement_ix,
-                             const size_t ir_instruction_ix);
+    uint8_t emit_IR_insn_EQU
+                (std::string lhs, std::string rhs, size_t* cur_wr_offset,
+                 const size_t bytes_available, const size_t code_block_ix,
+                 const size_t statement_ix, const size_t ir_instruction_ix);
 
-    uint8_t emit_IR_insn_ADD(std::string lhs_operand, std::string rhs_operand,
-                             std::string target,
-                             size_t* cur_wr_offset,
-                             const size_t bytes_available,
-                             const size_t code_block_ix,
-                             const size_t statement_ix,
-                             const size_t ir_instruction_ix);
+    uint8_t emit_IR_insn_ADD
+                (std::string ir_insn_target, std::string ir_insn_operand1,
+                 std::string ir_insn_operand2, size_t* cur_wr_offset,
+                 const size_t bytes_available, const size_t code_block_ix,
+                 const size_t statement_ix, const size_t ir_instruction_ix);
 
-    uint8_t emit_IR_insn_SUB(std::string lhs_operand, std::string rhs_operand,
-                             std::string target,
-                             size_t* cur_wr_offset,
-                             const size_t bytes_available,
-                             const size_t code_block_ix,
-                             const size_t statement_ix,
-                             const size_t ir_instruction_ix);
+    uint8_t emit_IR_insn_SUB
+                (std::string ir_insn_target, std::string ir_insn_operand1,
+                 std::string ir_insn_operand2, size_t* cur_wr_offset,
+                 const size_t bytes_available, const size_t code_block_ix,
+                 const size_t statement_ix, const size_t ir_instruction_ix);
 
-    uint8_t emit_IR_insn_MUL(std::string lhs_operand, std::string rhs_operand,
-                             std::string target,
-                             size_t* cur_wr_offset,
-                             const size_t bytes_available,
-                             const size_t code_block_ix,
-                             const size_t statement_ix,
-                             const size_t ir_instruction_ix);
+    uint8_t emit_IR_insn_MUL
+                (std::string ir_insn_target, std::string ir_insn_operand1,
+                 std::string ir_insn_operand2, size_t* cur_wr_offset,
+                 const size_t bytes_available, const size_t code_block_ix,
+                 const size_t statement_ix, const size_t ir_instruction_ix);
 
-    uint8_t emit_IR_insn_DIV(std::string lhs_operand, std::string rhs_operand,
-                             std::string quotient, std::string remainder,
-                             size_t* cur_wr_offset,
-                             const size_t bytes_available,
-                             const size_t code_block_ix,
-                             const size_t statement_ix,
-                             const size_t ir_instruction_ix);
+    uint8_t emit_IR_insn_DIV
+                (std::string ir_insn_target, std::string ir_insn_operand1,
+                 std::string ir_insn_operand2, size_t* cur_wr_offset,
+                 const size_t bytes_available, const size_t code_block_ix,
+                 const size_t statement_ix, const size_t ir_instruction_ix);
 };
+
 
 /* The main compilation driver chooses which IR generation quota to process. */
 uint8_t IR_Generation_Orchestrator::spawn_IR_generator
@@ -341,7 +332,7 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
 
     ret = my_IR_generator.emit_IR();
 
-    if(ret)
+    if(ret == 1)
     [[unlikely]]
     {
         std::cout << "Not enough Arena memory for IR instructions of blocks:\n";
@@ -349,8 +340,18 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
         {
             std::cout << selected_IR_generation_quota[i];
         }
-        std::cout << "\nGiving the IR Instructions Arena more memory.\n";
         return 1;
+    }
+
+    else if(ret == 2)
+    [[unlikely]]
+    {
+        std::cout << "Not enough IR Instructions Dir. entries of blocks:\n";
+        for(size_t i = 0; i < selected_IR_generation_quota.size(); ++i)
+        {
+            std::cout << selected_IR_generation_quota[i];
+        }
+        return 2;
     }
 
     else
@@ -563,6 +564,7 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
     std::string assignment_lhs_src_var = stmt_node->lhs_identifier->symbol_name;
     std::string ir_insn_target;
     std::string ir_insn_operand1;
+    std::string sign_str;
     size_t name_mangle_ix;
     /* RHS of each assignment is an expression of one of these kinds: */
     AST_Node_Expr_BinOp*          rhs_expr_binop       = nullptr;
@@ -622,10 +624,6 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
                                     &wr_offset, bytes_available, code_block_ix,
                                     statement_ix, insns_emitted_for_this_stmt);
 
-            /* TODO: Check that ALL functions that could run out of space in
-             *       an Arena and in a Directory or any other vairable-sized
-             *       data structure don't just return 1 in all error cases.
-             */
             if(ret) [[unlikely]] { return ret; }
 
             /* Place the newly recorded literal in the IR bookkeeping array. */
@@ -750,15 +748,18 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
          * NESTED binary operation: The assignment's RHS is a BinOp AND that
          * BinOp's LHS is itself a BinOp and we don't know how deep it goes,
          * the recursive function we call here will handle that.
-         *
-         * TODO: Implement the function emit_auxilliary_IR_for_nested_binop().
          */
         else if(binop_lhs_expr_kind == EXPR_KIND_BIN_OPERATION)
         {
-            this->emit_auxilliary_IR_for_nested_binop(&insns_emitted_for_this_stmt, rhs_expr_binop->lhs_expression);
-            ++insns_emitted_for_this_stmt;
+            this->emit_auxilliary_IR_for_nested_binop
+                 (&wr_offset, bytes_available, code_block_ix, statement_ix,
+                  &insns_emitted_for_this_stmt, rhs_expr_binop->lhs_expression);
+
             /* Construct the string ir_insn_operand1 here now. */
+            ir_insn_operand1 = std::string("%_temp_")
+                           + std::to_string(this->IR_intermediates_emitted - 1);
         }
+
         /* Operand 2: might be a literal, a symbol, or a nested BinOp. */
         literal_has_already_been_encountered = false;
         binop_rhs_expr_kind = rhs_expr_binop->rhs_expression->expr_kind_ix;
@@ -812,27 +813,55 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
                                + std::string("_")
                                + std::to_string(name_mangle_ix);
         }
-        /* BinOp RHS is itself a BinOp: process it in its own recursive func.
-         *
-         * TODO: Implement the function emit_auxilliary_IR_for_nested_binop().
-         */
+        /* BinOp RHS is itself a BinOp: process it in its own recursive func. */
         else if(binop_rhs_expr_kind == EXPR_KIND_BIN_OPERATION)
         {
-            this->emit_auxilliary_IR_for_nested_binop(&insns_emitted_for_this_stmt, rhs_expr_binop->rhs_expression);
+            ret = this->emit_auxilliary_IR_for_nested_binop
+                 (&wr_offset, bytes_available, code_block_ix, statement_ix,
+                  &insns_emitted_for_this_stmt, rhs_expr_binop->rhs_expression);
+
+            if(ret) [[unlikely]] { return ret; }
 
             /* Construct the string ir_insn_operand2 here now. */
+            ir_insn_operand2 =   std::string("%_temp_")
+                           + std::to_string(this->IR_intermediates_emitted - 1);
         }
 
-        /* The other 2 cases for the assignment statement syntax (assignment RHS
-         * is a symbol or is a literal) already produced the string for this IR
-         * instruction's target variable and emitted the IR instruction. Do that
-         * here too, now that we have the IR variables containing both LHS and
-         * RHS of the BinOp that was on the RHS of the assignment statement.
-         *
-         * TODO: Emitting the target IR variable and the IR instruction feel
-         * like they should have the code for doing it only once, at the end of
-         * this function here.
-         */
+        ir_insn_target =   std::string("%_temp_")
+                         + std::to_string(this->IR_intermediates_emitted);
+
+        ++this->IR_intermediates_emitted;
+
+        /* Which sign does the BinOp have? */
+        sign_str = rhs_expr_binop->binary_operator;
+
+        if(sign_str == "+")
+            ret = this->emit_IR_insn_ADD
+                (ir_insn_target, ir_insn_operand1, ir_insn_operand2, &wr_offset,
+                 bytes_available, code_block_ix, statement_ix,
+                 insns_emitted_for_this_stmt);
+
+        else if(sign_str == "-")
+            ret = this->emit_IR_insn_SUB
+                (ir_insn_target, ir_insn_operand1, ir_insn_operand2, &wr_offset,
+                 bytes_available, code_block_ix, statement_ix,
+                 insns_emitted_for_this_stmt);
+
+        else if(sign_str == "*")
+            ret = this->emit_IR_insn_MUL
+                (ir_insn_target, ir_insn_operand1, ir_insn_operand2, &wr_offset,
+                 bytes_available, code_block_ix, statement_ix,
+                 insns_emitted_for_this_stmt);
+
+        else if(sign_str == "/")
+            ret = this->emit_IR_insn_DIV
+                (ir_insn_target, ir_insn_operand1, ir_insn_operand2, &wr_offset,
+                 bytes_available, code_block_ix, statement_ix,
+                 insns_emitted_for_this_stmt);
+
+        if(ret) [[unlikely]] { return ret; }
+
+        ++insns_emitted_for_this_stmt;
     }
 
     ++(this->count_statements_it_emitted_IR_for);
@@ -870,16 +899,10 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     std::string ir_insn_target;
     std::string ir_insn_operand1;
     std::string ir_insn_operand2;
+    std::string sign_str;
     uint8_t     binop_lhs_expr_kind;
     uint8_t     binop_rhs_expr_kind;
     size_t      name_mangle_ix;
-    /* Each side of a BinOp is an expression of one of these 3 kinds: */
-    AST_Node_Expr_BinOp*          binop_rhs_expr_binop       = nullptr;
-    AST_Node_Expr_BinOp*          binop_lhs_expr_binop       = nullptr;
-    AST_Node_Expr_UINT64_Literal* binop_rhs_expr_u64_literal = nullptr;
-    AST_Node_Expr_UINT64_Literal* binop_lhs_expr_u64_literal = nullptr;
-    AST_Node_Expr_Identifier*     binop_rhs_expr_identifier  = nullptr;
-    AST_Node_Expr_Identifier*     binop_lhs_expr_identifier  = nullptr;
     /* Have these only if a side of this BinOp is a source variable. */
     std::string binop_rhs_var;
     std::string binop_lhs_var;
@@ -943,11 +966,11 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     /* if it's a nested binop: */
     else if(binop_lhs_expr_kind == EXPR_KIND_BIN_OPERATION)
     {
-        this->emit_auxilliary_IR_for_nested_binop
+        ret = this->emit_auxilliary_IR_for_nested_binop
                 (&wr_offset, bytes_available, code_block_ix, statement_ix,
                  &insns_emitted_for_this_stmt, binop->lhs_expression);
 
-        ++insns_emitted_for_this_stmt;
+        if(ret) [[unlikely]] { return ret; }
 
         /* Construct the string ir_insn_operand1 here now. It will be an aux IR
          * variable with the current IR Generator's held counter for them.
@@ -1019,11 +1042,11 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     /* if it's a nested binop: */
     else if(binop_rhs_expr_kind == EXPR_KIND_BIN_OPERATION)
     {
-        this->emit_auxilliary_IR_for_nested_binop
+        ret = this->emit_auxilliary_IR_for_nested_binop
                 (&wr_offset, bytes_available, code_block_ix, statement_ix,
                  &insns_emitted_for_this_stmt, binop->rhs_expression);
 
-        ++insns_emitted_for_this_stmt;
+        if(ret) [[unlikely]] { return ret; }
 
         /* Construct the string ir_insn_operand1 here now. It will be an aux IR
          * variable with the current IR Generator's held counter for them.
@@ -1037,37 +1060,63 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     }
 
     /* OK. Now we have IR operands 1 and 2. Now construct the IR instruction
-     * target and emit the auxilliary IR instruction.
-     *
-     * DO NOT bump insns_emitted_for_this_stmt.
+     * target and emit the auxilliary IR instruction based on sign.
      */
-
     ir_insn_target =   std::string("%_temp_")
                      + std::to_string(this->IR_intermediates_emitted);
 
     ++this->IR_intermediates_emitted;
+
+    /* Which sign does the BinOp have? */
+    sign_str = binop->binary_operator;
+
+    if(sign_str == "+")
+        ret = this->emit_IR_insn_ADD
+            (ir_insn_target, ir_insn_operand1, ir_insn_operand2, &wr_offset,
+             bytes_available, code_block_ix, statement_ix,
+             insns_emitted_for_this_stmt);
+
+    else if(sign_str == "-")
+        ret = this->emit_IR_insn_SUB
+            (ir_insn_target, ir_insn_operand1, ir_insn_operand2, &wr_offset,
+             bytes_available, code_block_ix, statement_ix,
+             insns_emitted_for_this_stmt);
+
+    else if(sign_str == "*")
+        ret = this->emit_IR_insn_MUL
+            (ir_insn_target, ir_insn_operand1, ir_insn_operand2, &wr_offset,
+             bytes_available, code_block_ix, statement_ix,
+             insns_emitted_for_this_stmt);
+
+    else if(sign_str == "/")
+        ret = this->emit_IR_insn_DIV
+            (ir_insn_target, ir_insn_operand1, ir_insn_operand2, &wr_offset,
+             bytes_available, code_block_ix, statement_ix,
+             insns_emitted_for_this_stmt);
+
+    if(ret) [[unlikely]] { return ret; }
+
+    ++insns_emitted_for_this_stmt;
 
     /* Update Arena byte offset and counter for IR instructions emitted for the
      * source statement currently being processed, via passed pointers.
      */
     *passed_insns_emitted_for_stmt = insns_emitted_for_this_stmt;
     *passed_wr_offset = wr_offset;
+    return 0;
 }
 
-
-uint8_t IR_Generator::emit_IR_insn_EQU(std::string lhs, std::string rhs,
-                                       size_t* cur_wr_offset,
-                                       const size_t bytes_available,
-                                       const size_t code_block_ix,
-                                       const size_t statement_ix,
-                                       const size_t ir_instruction_ix)
+uint8_t IR_Generator::emit_IR_insn_EQU
+            (std::string lhs, std::string rhs, size_t* cur_wr_offset,
+             const size_t bytes_available, const size_t code_block_ix,
+             const size_t statement_ix, const size_t ir_instruction_ix)
 {
     /* Save byte offset into Arena locally from passed pointer. */
     size_t wr_offset = *cur_wr_offset;
 
     /* Align if needed and make sure the Arena has enough memory. */
     while
-      ( ((uintptr_t)(IR_instructions_arena + wr_offset))
+      ( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
        % alignof(ir_insn_equate) )
     { ++wr_offset; };
 
@@ -1082,7 +1131,7 @@ uint8_t IR_Generator::emit_IR_insn_EQU(std::string lhs, std::string rhs,
     { return 2; }
 
     /* Construct new IR instruction in IR Arena, advance byte offset tracker. */
-    new (IR_instructions_arena + wr_offset) ir_insn_equate(lhs, rhs);
+    new (this->IR_instructions_arena + wr_offset) ir_insn_equate(lhs, rhs);
     wr_offset += sizeof(ir_insn_equate);
 
     /* Put entry in IR Instructions Directory, bump used_entries counter. */
@@ -1092,6 +1141,190 @@ uint8_t IR_Generator::emit_IR_insn_EQU(std::string lhs, std::string rhs,
                                           ir_instruction_ix,
                                           wr_offset - sizeof(ir_insn_equate),
                                           IR_INSN_EQUATE);
+
+    ++(*(this->IR_instructions_dir_used_entries));
+
+    /* Update passed pointer to Arena byte offset. */
+    *cur_wr_offset = wr_offset;
+    return 0;
+}
+
+uint8_t IR_Generator::emit_IR_insn_ADD
+            (std::string  ir_insn_target,   std::string ir_insn_operand1,
+             std::string  ir_insn_operand2, size_t* cur_wr_offset,
+             const size_t bytes_available,  const size_t code_block_ix,
+             const size_t statement_ix,     const size_t ir_instruction_ix)
+{
+    /* Save byte offset into Arena locally from passed pointer. */
+    size_t wr_offset = *cur_wr_offset;
+
+    /* Align if needed and make sure the Arena has enough memory. */
+    while
+      ( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
+       % alignof(ir_insn_add) )
+    { ++wr_offset; };
+
+    if(wr_offset + sizeof(ir_insn_add) > bytes_available)
+    [[unlikely]]
+    { return 1; }
+
+    /* Make sure the IR Instructions Directory has available entries. */
+    if(*(this->IR_instructions_dir_used_entries)
+         == this->IR_instructions_dir_available_entries)
+    [[unlikely]]
+    { return 2; }
+
+    /* Construct new IR instruction in IR Arena, advance byte offset tracker. */
+    new (IR_instructions_arena + wr_offset) ir_insn_add
+            (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
+
+    wr_offset += sizeof(ir_insn_add);
+
+    /* Put entry in IR Instructions Directory, bump used_entries counter. */
+    (*(this->IR_instructions_directory))
+        [*(this->IR_instructions_dir_used_entries)]
+        = IR_Instructions_Directory_Entry(code_block_ix, statement_ix,
+                                          ir_instruction_ix,
+                                          wr_offset - sizeof(ir_insn_add),
+                                          IR_INSN_ADD);
+
+    ++(*(this->IR_instructions_dir_used_entries));
+
+    /* Update passed pointer to Arena byte offset. */
+    *cur_wr_offset = wr_offset;
+    return 0;
+}
+
+uint8_t IR_Generator::emit_IR_insn_SUB
+            (std::string  ir_insn_target,   std::string ir_insn_operand1,
+             std::string  ir_insn_operand2, size_t* cur_wr_offset,
+             const size_t bytes_available,  const size_t code_block_ix,
+             const size_t statement_ix,     const size_t ir_instruction_ix)
+{
+    /* Save byte offset into Arena locally from passed pointer. */
+    size_t wr_offset = *cur_wr_offset;
+
+    /* Align if needed and make sure the Arena has enough memory. */
+    while
+      ( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
+       % alignof(ir_insn_sub) )
+    { ++wr_offset; };
+
+    if(wr_offset + sizeof(ir_insn_sub) > bytes_available)
+    [[unlikely]]
+    { return 1; }
+
+    /* Make sure the IR Instructions Directory has available entries. */
+    if(*(this->IR_instructions_dir_used_entries)
+         == this->IR_instructions_dir_available_entries)
+    [[unlikely]]
+    { return 2; }
+
+    /* Construct new IR instruction in IR Arena, advance byte offset tracker. */
+    new (IR_instructions_arena + wr_offset) ir_insn_sub
+            (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
+
+    wr_offset += sizeof(ir_insn_sub);
+
+    /* Put entry in IR Instructions Directory, bump used_entries counter. */
+    (*(this->IR_instructions_directory))
+        [*(this->IR_instructions_dir_used_entries)]
+        = IR_Instructions_Directory_Entry(code_block_ix, statement_ix,
+                                          ir_instruction_ix,
+                                          wr_offset - sizeof(ir_insn_sub),
+                                          IR_INSN_SUB);
+
+    ++(*(this->IR_instructions_dir_used_entries));
+
+    /* Update passed pointer to Arena byte offset. */
+    *cur_wr_offset = wr_offset;
+    return 0;
+}
+
+uint8_t IR_Generator::emit_IR_insn_MUL
+            (std::string  ir_insn_target,   std::string ir_insn_operand1,
+             std::string  ir_insn_operand2, size_t* cur_wr_offset,
+             const size_t bytes_available,  const size_t code_block_ix,
+             const size_t statement_ix,     const size_t ir_instruction_ix)
+{
+    /* Save byte offset into Arena locally from passed pointer. */
+    size_t wr_offset = *cur_wr_offset;
+
+    /* Align if needed and make sure the Arena has enough memory. */
+    while
+      ( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
+       % alignof(ir_insn_mul) )
+    { ++wr_offset; };
+
+    if(wr_offset + sizeof(ir_insn_mul) > bytes_available)
+    [[unlikely]]
+    { return 1; }
+
+    /* Make sure the IR Instructions Directory has available entries. */
+    if(*(this->IR_instructions_dir_used_entries)
+         == this->IR_instructions_dir_available_entries)
+    [[unlikely]]
+    { return 2; }
+
+    /* Construct new IR instruction in IR Arena, advance byte offset tracker. */
+    new (IR_instructions_arena + wr_offset) ir_insn_mul
+            (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
+
+    wr_offset += sizeof(ir_insn_mul);
+
+    /* Put entry in IR Instructions Directory, bump used_entries counter. */
+    (*(this->IR_instructions_directory))
+        [*(this->IR_instructions_dir_used_entries)]
+        = IR_Instructions_Directory_Entry(code_block_ix, statement_ix,
+                                          ir_instruction_ix,
+                                          wr_offset - sizeof(ir_insn_mul),
+                                          IR_INSN_MUL);
+
+    ++(*(this->IR_instructions_dir_used_entries));
+
+    /* Update passed pointer to Arena byte offset. */
+    *cur_wr_offset = wr_offset;
+    return 0;
+}
+
+uint8_t IR_Generator::emit_IR_insn_DIV
+            (std::string  ir_insn_target,   std::string ir_insn_operand1,
+             std::string  ir_insn_operand2, size_t* cur_wr_offset,
+             const size_t bytes_available,  const size_t code_block_ix,
+             const size_t statement_ix,     const size_t ir_instruction_ix)
+{
+    /* Save byte offset into Arena locally from passed pointer. */
+    size_t wr_offset = *cur_wr_offset;
+
+    /* Align if needed and make sure the Arena has enough memory. */
+    while
+      ( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
+       % alignof(ir_insn_div) )
+    { ++wr_offset; };
+
+    if(wr_offset + sizeof(ir_insn_div) > bytes_available)
+    [[unlikely]]
+    { return 1; }
+
+    /* Make sure the IR Instructions Directory has available entries. */
+    if(*(this->IR_instructions_dir_used_entries)
+         == this->IR_instructions_dir_available_entries)
+    [[unlikely]]
+    { return 2; }
+
+    /* Construct new IR instruction in IR Arena, advance byte offset tracker. */
+    new (IR_instructions_arena + wr_offset) ir_insn_div
+            (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
+
+    wr_offset += sizeof(ir_insn_div);
+
+    /* Put entry in IR Instructions Directory, bump used_entries counter. */
+    (*(this->IR_instructions_directory))
+        [*(this->IR_instructions_dir_used_entries)]
+        = IR_Instructions_Directory_Entry(code_block_ix, statement_ix,
+                                          ir_instruction_ix,
+                                          wr_offset - sizeof(ir_insn_div),
+                                          IR_INSN_DIV);
 
     ++(*(this->IR_instructions_dir_used_entries));
 
