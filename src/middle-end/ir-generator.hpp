@@ -576,8 +576,14 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
     std::string assignment_rhs_var2;
     /* Only have these if the assignment RHS is a BinOp. */
     std::string ir_insn_operand2;
+
     uint8_t binop_lhs_expr_kind;
+    AST_Node_Expr_UINT64_Literal* binop_lhs_expr_u64_literal;
+    AST_Node_Expr_Identifier*     binop_lhs_expr_identifier;
+
     uint8_t binop_rhs_expr_kind;
+    AST_Node_Expr_UINT64_Literal* binop_rhs_expr_u64_literal;
+    AST_Node_Expr_Identifier*     binop_rhs_expr_identifier;
 
     /* Look at assignment RHS: which of the 3 cases are we dealing with? */
 
@@ -694,10 +700,14 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
             u64_literals_encountered_arr_cur_siz =
                 this->encountered_u64_literals_array.size();
 
+            binop_lhs_expr_u64_literal =
+                (AST_Node_Expr_UINT64_Literal*)(rhs_expr_binop->lhs_expression);
+
+            literal_val = binop_lhs_expr_u64_literal->value;
+
             for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
             {
-                if(rhs_expr_binop->lhs_expression->value
-                    == this->encountered_u64_literals_array[i])
+                if(literal_val == this->encountered_u64_literals_array[i])
                 {
                     literal_has_already_been_encountered = true;
                     break;
@@ -705,7 +715,7 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
             }
 
             ir_insn_operand1 = "%const_" + std::to_string(i);
-            literal_val = rhs_expr_binop->lhs_expression->value;
+
             if(literal_has_already_been_encountered == false)
             {
                 ret = emit_IR_insn_EQU
@@ -716,8 +726,8 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
                 if(ret) [[unlikely]] { return ret; }
 
                 /* Place newly recorded literal in the IR bookkeeping array. */
-                this->encountered_u64_literals_array.emplace_back
-                    (rhs_expr_binop->lhs_expression->value);
+
+                this->encountered_u64_literals_array.emplace_back(literal_val);
 
                 ++insns_emitted_for_this_stmt;
             }
@@ -725,11 +735,14 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         /* if it's a source variable, do what case 2. does. */
         else if(binop_lhs_expr_kind == EXPR_KIND_IDENTIFIER)
         {
+            binop_lhs_expr_identifier =
+                (AST_Node_Expr_Identifier*)(rhs_expr_binop->lhs_expression);
+
             assignment_rhs_var1 =
-                rhs_expr_binop->lhs_expression->symbol->symbol_name;
+                binop_lhs_expr_identifier->symbol->symbol_name;
 
             name_mangle_ix =
-              rhs_expr_binop->lhs_expression->symbol->SSA_IR_mangle_counter - 1;
+                binop_lhs_expr_identifier->symbol->SSA_IR_mangle_counter - 1;
 
             ir_insn_operand1 = std::string("%") + assignment_rhs_var1
                              + std::string("_")
@@ -753,7 +766,8 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         {
             this->emit_auxilliary_IR_for_nested_binop
                  (&wr_offset, bytes_available, code_block_ix, statement_ix,
-                  &insns_emitted_for_this_stmt, rhs_expr_binop->lhs_expression);
+                  &insns_emitted_for_this_stmt,
+                  (AST_Node_Expr_BinOp*)rhs_expr_binop->lhs_expression);
 
             /* Construct the string ir_insn_operand1 here now. */
             ir_insn_operand1 = std::string("%_temp_")
@@ -771,10 +785,14 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
             u64_literals_encountered_arr_cur_siz =
                 this->encountered_u64_literals_array.size();
 
+            binop_rhs_expr_u64_literal =
+                (AST_Node_Expr_UINT64_Literal*)(rhs_expr_binop->rhs_expression);
+
+            literal_val = binop_rhs_expr_u64_literal->value;
+
             for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
             {
-                if(rhs_expr_binop->rhs_expression->value
-                    == this->encountered_u64_literals_array[i])
+                if(literal_val == this->encountered_u64_literals_array[i])
                 {
                     literal_has_already_been_encountered = true;
                     break;
@@ -786,16 +804,14 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
             if(literal_has_already_been_encountered == false)
             {
                 ret = emit_IR_insn_EQU
-                 (ir_insn_operand2,
-                  std::to_string(rhs_expr_binop->rhs_expression->value),
-                  &wr_offset, bytes_available, code_block_ix, statement_ix,
-                  insns_emitted_for_this_stmt);
+                   (ir_insn_operand2, std::to_string(literal_val),
+                    &wr_offset, bytes_available, code_block_ix, statement_ix,
+                    insns_emitted_for_this_stmt);
 
                 if(ret) [[unlikely]] { return ret; }
 
                 /* Place newly recorded literal in the IR bookkeeping array. */
-                this->encountered_u64_literals_array.emplace_back
-                    (rhs_expr_binop->rhs_expression->value);
+                this->encountered_u64_literals_array.emplace_back(literal_val);
 
                 ++insns_emitted_for_this_stmt;
             }
@@ -803,11 +819,14 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         /* if it's a source variable, do what case 2. does. */
         else if(binop_rhs_expr_kind == EXPR_KIND_IDENTIFIER)
         {
+            binop_rhs_expr_identifier =
+                (AST_Node_Expr_Identifier*)(rhs_expr_binop->rhs_expression);
+
             assignment_rhs_var2 =
-                rhs_expr_binop->rhs_expression->symbol->symbol_name;
+                binop_rhs_expr_identifier->symbol->symbol_name;
 
             name_mangle_ix =
-              rhs_expr_binop->rhs_expression->symbol->SSA_IR_mangle_counter - 1;
+                binop_rhs_expr_identifier->symbol->SSA_IR_mangle_counter - 1;
 
             ir_insn_operand2 =   std::string("%") + assignment_rhs_var2
                                + std::string("_")
@@ -818,7 +837,8 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         {
             ret = this->emit_auxilliary_IR_for_nested_binop
                  (&wr_offset, bytes_available, code_block_ix, statement_ix,
-                  &insns_emitted_for_this_stmt, rhs_expr_binop->rhs_expression);
+                  &insns_emitted_for_this_stmt,
+                  (AST_Node_Expr_BinOp*)rhs_expr_binop->rhs_expression);
 
             if(ret) [[unlikely]] { return ret; }
 
@@ -827,10 +847,12 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
                            + std::to_string(this->IR_intermediates_emitted - 1);
         }
 
-        ir_insn_target =   std::string("%_temp_")
-                         + std::to_string(this->IR_intermediates_emitted);
+        name_mangle_ix = stmt_node->lhs_identifier->SSA_IR_mangle_counter;
 
-        ++this->IR_intermediates_emitted;
+        ir_insn_target =   std::string("%") + assignment_lhs_src_var
+                         + std::string("_") + std::to_string(name_mangle_ix);
+
+        stmt_node->lhs_identifier->SSA_IR_mangle_counter += 1;
 
         /* Which sign does the BinOp have? */
         sign_str = rhs_expr_binop->binary_operator;
@@ -861,6 +883,7 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
 
         if(ret) [[unlikely]] { return ret; }
 
+        /*++this->IR_intermediates_emitted;*/
         ++insns_emitted_for_this_stmt;
     }
 
@@ -891,7 +914,7 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     bool   literal_has_already_been_encountered;
     size_t u64_literals_encountered_arr_cur_siz;
     size_t insns_emitted_for_this_stmt = *passed_insns_emitted_for_stmt;
-    size_t wr_offset = *cur_wr_offset;
+    size_t wr_offset = *passed_wr_offset;
 
     /* The rest: Function local temporaries for convenience and readability. */
 
@@ -909,6 +932,12 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     /* Have this only if a side of this BinOp is a literal. */
     uint64_t literal_val;
 
+    /* Need these when a side of the BinOp is a literal or an identifier. */
+    AST_Node_Expr_UINT64_Literal* binop_rhs_expr_u64_literal;
+    AST_Node_Expr_UINT64_Literal* binop_lhs_expr_u64_literal;
+    AST_Node_Expr_Identifier*     binop_rhs_expr_identifier;
+    AST_Node_Expr_Identifier*     binop_lhs_expr_identifier;
+
     /* BinOp LHS: 3 cases. */
 
     literal_has_already_been_encountered = false;
@@ -918,14 +947,17 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     if(binop_lhs_expr_kind == EXPR_KIND_UINT64_LITERAL)
     {
         /* Look for the u64 literal in the array of already seen ones. */
-
         u64_literals_encountered_arr_cur_siz =
             this->encountered_u64_literals_array.size();
 
+        binop_lhs_expr_u64_literal
+            = (AST_Node_Expr_UINT64_Literal*)binop->lhs_expression;
+
+        literal_val = binop_lhs_expr_u64_literal->value;
+
         for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
         {
-            if(binop->lhs_expression->value
-                == this->encountered_u64_literals_array[i])
+            if(literal_val == this->encountered_u64_literals_array[i])
             {
                 literal_has_already_been_encountered = true;
                 break;
@@ -938,15 +970,14 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
         {
             ret = emit_IR_insn_EQU
              (ir_insn_operand1,
-              std::to_string(binop->lhs_expression->value),
+              std::to_string(literal_val),
               &wr_offset, bytes_available, code_block_ix, statement_ix,
               insns_emitted_for_this_stmt);
 
             if(ret) [[unlikely]] { return ret; }
 
             /* Place newly recorded literal in the IR bookkeeping array. */
-            this->encountered_u64_literals_array.emplace_back
-                (binop->lhs_expression->value);
+            this->encountered_u64_literals_array.emplace_back(literal_val);
 
             ++insns_emitted_for_this_stmt;
         }
@@ -954,10 +985,13 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     /* if it's a source variable: */
     else if(binop_lhs_expr_kind == EXPR_KIND_IDENTIFIER)
     {
-        binop_lhs_var = binop->lhs_expression->symbol->symbol_name;
+        binop_lhs_expr_identifier
+            = (AST_Node_Expr_Identifier*)(binop->lhs_expression);
+
+        binop_lhs_var = binop_lhs_expr_identifier->symbol->symbol_name;
 
         name_mangle_ix =
-          binop->lhs_expression->symbol->SSA_IR_mangle_counter - 1;
+            binop_lhs_expr_identifier->symbol->SSA_IR_mangle_counter - 1;
 
         ir_insn_operand1 =   std::string("%") + binop_lhs_var
                            + std::string("_")
@@ -968,7 +1002,8 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     {
         ret = this->emit_auxilliary_IR_for_nested_binop
                 (&wr_offset, bytes_available, code_block_ix, statement_ix,
-                 &insns_emitted_for_this_stmt, binop->lhs_expression);
+                 &insns_emitted_for_this_stmt,
+                 (AST_Node_Expr_BinOp*)binop->lhs_expression);
 
         if(ret) [[unlikely]] { return ret; }
 
@@ -997,10 +1032,14 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
         u64_literals_encountered_arr_cur_siz =
             this->encountered_u64_literals_array.size();
 
+        binop_rhs_expr_u64_literal
+            = (AST_Node_Expr_UINT64_Literal*)binop->rhs_expression;
+
+        literal_val = binop_rhs_expr_u64_literal->value;
+
         for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
         {
-            if(binop->rhs_expression->value
-                == this->encountered_u64_literals_array[i])
+            if(literal_val == this->encountered_u64_literals_array[i])
             {
                 literal_has_already_been_encountered = true;
                 break;
@@ -1013,15 +1052,14 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
         {
             ret = emit_IR_insn_EQU
              (ir_insn_operand2,
-              std::to_string(binop->rhs_expression->value),
+              std::to_string(literal_val),
               &wr_offset, bytes_available, code_block_ix, statement_ix,
               insns_emitted_for_this_stmt);
 
             if(ret) [[unlikely]] { return ret; }
 
             /* Place newly recorded literal in the IR bookkeeping array. */
-            this->encountered_u64_literals_array.emplace_back
-                (binop->rhs_expression->value);
+            this->encountered_u64_literals_array.emplace_back(literal_val);
 
             ++insns_emitted_for_this_stmt;
         }
@@ -1030,10 +1068,13 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     /* if it's a source variable: */
     else if(binop_rhs_expr_kind == EXPR_KIND_IDENTIFIER)
     {
-        binop_rhs_var = binop->rhs_expression->symbol->symbol_name;
+        binop_rhs_expr_identifier
+            = (AST_Node_Expr_Identifier*)binop->rhs_expression;
+
+        binop_rhs_var = binop_rhs_expr_identifier->symbol->symbol_name;
 
         name_mangle_ix =
-          binop->rhs_expression->symbol->SSA_IR_mangle_counter - 1;
+            binop_rhs_expr_identifier->symbol->SSA_IR_mangle_counter - 1;
 
         ir_insn_operand2 =   std::string("%") + binop_rhs_var
                            + std::string("_")
@@ -1044,7 +1085,8 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     {
         ret = this->emit_auxilliary_IR_for_nested_binop
                 (&wr_offset, bytes_available, code_block_ix, statement_ix,
-                 &insns_emitted_for_this_stmt, binop->rhs_expression);
+                 &insns_emitted_for_this_stmt,
+                 (AST_Node_Expr_BinOp*)binop->rhs_expression);
 
         if(ret) [[unlikely]] { return ret; }
 
@@ -1064,8 +1106,6 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
      */
     ir_insn_target =   std::string("%_temp_")
                      + std::to_string(this->IR_intermediates_emitted);
-
-    ++this->IR_intermediates_emitted;
 
     /* Which sign does the BinOp have? */
     sign_str = binop->binary_operator;
@@ -1097,6 +1137,7 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     if(ret) [[unlikely]] { return ret; }
 
     ++insns_emitted_for_this_stmt;
+    ++this->IR_intermediates_emitted;
 
     /* Update Arena byte offset and counter for IR instructions emitted for the
      * source statement currently being processed, via passed pointers.

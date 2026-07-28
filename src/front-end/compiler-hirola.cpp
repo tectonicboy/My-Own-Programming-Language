@@ -32,6 +32,9 @@ int main()
     "a = 7;\n"
     "b = a;\n"
     "d = c;\n"
+    "c = (a + 5);\n"
+    "a = (a + b);\n"
+    "a = (( (10 + d) / (a * c) ) + (a - 77));\n"
     "BLOCK_END";
 
 /*
@@ -219,7 +222,11 @@ std::string first_program =
     IR_Instructions_Directory_Entry* entry;
     size_t which_ir_insn;
     uint8_t* arena = my_ir_generation_orchestrator.IR_instructions_arena;
-    ir_insn_equate* insn_equ;
+    ir_insn_equate* insn_equ = nullptr;
+    ir_insn_add*    insn_add = nullptr;
+    ir_insn_sub*    insn_sub = nullptr;
+    ir_insn_mul*    insn_mul = nullptr;
+    ir_insn_div*    insn_div = nullptr;
 
     for(size_t i = 0; i < entries; ++i)
     {
@@ -230,6 +237,26 @@ std::string first_program =
         {
             insn_equ = (ir_insn_equate*)(arena + arena_offset);
             insn_equ->print_ir_insn();
+        }
+        else if(which_ir_insn == IR_INSN_ADD)
+        {
+            insn_add = (ir_insn_add*)(arena + arena_offset);
+            insn_add->print_ir_insn();
+        }
+        else if(which_ir_insn == IR_INSN_SUB)
+        {
+            insn_sub = (ir_insn_sub*)(arena + arena_offset);
+            insn_sub->print_ir_insn();
+        }
+        else if(which_ir_insn == IR_INSN_MUL)
+        {
+            insn_mul = (ir_insn_mul*)(arena + arena_offset);
+            insn_mul->print_ir_insn();
+        }
+        else if(which_ir_insn == IR_INSN_DIV)
+        {
+            insn_div = (ir_insn_div*)(arena + arena_offset);
+            insn_div->print_ir_insn();
         }
     }
 
