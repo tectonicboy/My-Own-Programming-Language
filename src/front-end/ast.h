@@ -1,22 +1,3 @@
-/* Language Grammar:
- * ----------------
- *
- * Program             ::= Statement+ "PROG_END"
- * Statement           ::= AssignmentStatement
- * AssignmentStatement ::= IDENTIFIER "=" Expression ";"
- * Expression          ::= INT_LITERAL | IDENTIFIER | BinaryOperation
- * BinaryOperation     ::= "(" Expression BinaryOperator Expression ")"
- * BinaryOperator      ::= "+" | "-" | "*" | "/"
- * IDENTIFIER          ::= [a-zA-Z_]+
- * INT_LITERAL         ::= [0-9]+
- *
- * Semantic Rules:
- * --------------
- *
- * Rule 1: Variables must be assigned to, before being read. No declarations
- *         without initialization are possible, for clarity and unambiguity.
- */
-
 /* Named tuple indices (for use in "get<NAMED_INDEX>") into each entry of
  * the Auxilliary Code Block Statement Directory.
  */
@@ -69,7 +50,24 @@ expression_kinds_lookuptable =
     "identifier",
     "binary_operation"
 };
+
 /*----------------------------------------------------------------------------*/
+
+/* The class for a custom memory arena. Several are utilized in the compiler.
+ * Each arena stores different sized, but related entries.
+ *
+ * For instance, the AST Arena holds AST Nodes for statements, for expressions
+ * of type LITERAL, for expression of type Binary Operation, etc.
+ */
+
+class memory_arena
+{
+public:
+
+
+
+
+};
 
 /* The Symbol class. */
 class Symbol

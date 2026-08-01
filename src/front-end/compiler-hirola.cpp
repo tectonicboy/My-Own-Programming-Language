@@ -140,17 +140,17 @@ std::string first_program =
 
     std::cout << "\nLexer finished! Printing collected program tokens:\n";
 
-    for(size_t i = 0; i < lexer1.collected_tokens.size(); ++i){
+    for(size_t i = 0; i < lexer1.token_array.size(); ++i){
         std::cout << "Printing token " << i << "\n";
-        lexer1.collected_tokens[i].Print_Token_Info();
+        lexer1.token_array[i].Print_Token_Info();
     }
 
-    std::cout << "\nTotal tokens: " << lexer1.collected_tokens.size() << "\n\n";
+    std::cout << "\nTotal tokens: " << lexer1.token_array.size() << "\n\n";
 
     std::cout << "Printing collected Code Blocks:\n";
 
-    for(size_t i = 0; i < lexer1.aux_code_block_directory.size(); ++i){
-        lexer1.aux_code_block_directory[i].print_code_block_info();
+    for(size_t i = 0; i < lexer1.code_block_directory.size(); ++i){
+        lexer1.code_block_directory[i].print_code_block_info();
     }
 
     std::cout << "Time taken LEXER: "
@@ -173,8 +173,8 @@ std::string first_program =
     std::vector<std::vector<size_t>> parsing_quotas = {{0}};
 
     ParsingOrchestrator my_parsing_orchestrator
-        (std::move(lexer1.aux_code_block_directory),
-         std::move(lexer1.collected_tokens),
+        (std::move(lexer1.code_block_directory),
+         std::move(lexer1.token_array),
          parsing_quotas);
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &tv1);
@@ -209,7 +209,7 @@ std::string first_program =
     }
 
     IR_Generation_Orchestrator my_ir_generation_orchestrator
-        (std::move(my_parsing_orchestrator.Symbol_Table),
+        (std::move(my_parsing_orchestrator.symbol_table),
          my_parsing_orchestrator.ast_arena,
          std::move(my_parsing_orchestrator.statement_directory),
          my_parsing_orchestrator.statement_directory_used_entries,

@@ -61,15 +61,14 @@ token_type_strings = {
 /*----------------------------------------------------------------------------*/
 
 /* Descriptor of a code block. */
-class Code_Block {
-
+class code_block_descriptor {
 public:
 
     size_t start_token_index;
     size_t end_token_index;
     size_t code_block_type_index;
 
-    Code_Block(size_t start_ix, size_t end_ix, size_t type_ix)
+    code_block_descriptor(size_t start_ix, size_t end_ix, size_t type_ix)
     : start_token_index(start_ix), end_token_index(end_ix),
       code_block_type_index(type_ix)
     {
@@ -87,7 +86,8 @@ public:
         }
     }
 
-    void print_code_block_info(void){
+    void print_code_block_info(void)
+    {
         std::cout << "\n--------------------------------------------------"
                   << "\nCode Block Type: "
                   << code_block_type_strings[code_block_type_index]
@@ -118,10 +118,10 @@ public:
  * as possible on one cache line.
  *
  * Only for multithreading, this becomes an issue called False Sharing.
- * If another thread needs another object on that same cache line, the
- * entire line has to be written out to RAM and brought back into the cache
- * of the CPU that needs the other object from that cache line. This would
- * become a performance killer, so watch out.
+ * If another thread needs another object on that same cache line, and,
+ * importantly, the two threads DO NOT SHARE A CACHE, the entire cache line has
+ * to be written out to the lowest level cache that the two CPU cores do share,
+ * or to RAM, and brought back into the cache. This can kill performance.
  */
 class Token {
 public:

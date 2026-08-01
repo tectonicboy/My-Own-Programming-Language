@@ -1,3 +1,7 @@
+/* Descriptor for each entry of the IR Instructions Directory. Each Code Block
+ * has one or more source statements. Each source statement gets one or more
+ * emitted IR instructions that implement it in SSA IR.
+ */
 class IR_Instructions_Directory_Entry {
 public:
 
@@ -29,28 +33,17 @@ public:
 
 };
 
-/* Receives from a Parsing Orchestrator:
- *
- *  - Populated Auxilliary Code Block Statement Directory
- *  - Populated AST Arena
- *  - Populated Symbol Table
- *
- * Initializes:
- *
- *  - A new empty IR Instructions Arena
- *  - Total size in bytes of the IR Instructions Arena
- *  - Currently used bytes in the IR Instructions Arena = zero
- *  - Pointer to next free region of the IR Instructions Arena = start of it
- *
- * Gives jobs to one or more IR Generators by giving them quotas for which
- * Code Block's statement AST Nodes to emit IR instructions for and their own
- * regions of the IR Instructions Arena to emit their IR code to.
+/* The IR Generator and IR Generation Orchestrator classes. */
+
+/* Gives jobs to one or more IR Generators by giving them quotas for which
+ * Code Block's statement AST Nodes to emit IR instructions for, and their own
+ * regions of the IR Instructions Arena to emit their IR code into.
  */
 class IR_Generation_Orchestrator {
 
 public:
     /* Receives these from a Parsing_Orchestrator: */
-    std::unordered_map<std::string, Symbol> Symbol_Table;
+    std::unordered_map<std::string, Symbol> symbol_table;
     uint8_t* ast_arena;
     std::vector<std::tuple<size_t, size_t, size_t>> statement_directory;
     const size_t statement_directory_used_entries;
@@ -76,7 +69,7 @@ public:
          const size_t statement_dir_num_used_entries_in,
          std::vector<std::vector<size_t>>&& IR_gen_quotas_in
         )
-    : Symbol_Table(std::move(sym_table_in)),
+    : symbol_table(std::move(sym_table_in)),
       /* TODO: Define the AST Arena and IR Instruction Arena and other memory
        *       arenas as classes (possibly even a generic (but not abstract)
        *       class Memory_Arena or Custom_Allocator that handles the arena)
@@ -175,7 +168,7 @@ class IR_Generator {
 
 public:
     /* Receives from an IR Generation Orchestrator: */
-    std::unordered_map<std::string, Symbol>* Symbol_Table;
+    std::unordered_map<std::string, Symbol>* symbol_table;
     uint8_t* ast_arena;
     std::vector<std::tuple<size_t, size_t, size_t>>* statement_directory;
     const size_t statement_directory_used_entries;
@@ -204,8 +197,8 @@ public:
     size_t IR_instructions_emitted;
     size_t count_statements_it_emitted_IR_for;
 
-    const size_t encountered_u64_literals_array_init_size;
-    size_t encountered_u64_literals_array_cur_size;
+    const size_t        encountered_u64_literals_array_init_size;
+    size_t              encountered_u64_literals_array_cur_size;
     std::vector<size_t> encountered_u64_literals_array;
 
     /* Constructor */
@@ -225,7 +218,7 @@ public:
          size_t* IR_insn_dir_used_entries_in,
          std::vector<size_t> IR_generation_quota_in
         )
-    : Symbol_Table(sym_table_ptr_in),
+    : symbol_table(sym_table_ptr_in),
       ast_arena(ast_arena_ptr_in),
       statement_directory(statement_dir_ptr_in),
       statement_directory_used_entries(statement_dir_used_entries_in),
@@ -311,7 +304,7 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
     size_t this_generator_used_IR_arena_bytes = 0;
     size_t this_generator_used_IR_dir_entries = 0;
 
-    IR_Generator my_IR_generator(&(this->Symbol_Table),
+    IR_Generator my_IR_generator(&(this->symbol_table),
                                  this->ast_arena,
                                  &(this->statement_directory),
                                  this->statement_directory_used_entries,
@@ -491,8 +484,9 @@ uint8_t IR_Generator::emit_IR(void)
 
 /* This function emits a single IR instruction for a single Assignment Statement
  * via its AST Node. Assignments from binary operations and from literals can
- * cause more IR instructions to be emitted beforehand, as each literal and
- * binary operation result get assigned to their own auxilliary IR variable.
+ * cause more IR instructions to be emitted beforehand, as each literal that
+ * hasn't yet been encountered and each nested binary operation result get
+ * assigned to their own auxilliary IR variables.
  *
  * Three cases exist that have to be handled differently:
  *
@@ -519,25 +513,26 @@ uint8_t IR_Generator::emit_IR(void)
  *         binary operation is itself a binary operation. Keep going until
  *         it's not. Abstract base class for Expression has a data member
  *         holding the Expression Type, which determines what derived Expression
- *         class object we are looking at. Then, create an intermediate IR
- *         variable holding the result of each simple binary operation.
+ *         class object we are looking at.
+ *
+ *      2. Create an intermediate IR variable to store the result of each
+ *         nested binary operation.
  *
  *         Basically, each binary operation's result, starting from the deepest
  *         nested one (which by definition only has a Symbol as RHS and LHS),
  *         is stored in its own auxilliary IR variable, in order to maintain
  *         Static Single-Assignment Form. The newly created auxilliary IR
  *         variables are then used in the binary operations whose RHS/LHS was
- *         THAT nested binary operation, which the IR vaiable was created for.
+ *         THAT nested binary operation, which the IR vaiable was created for,
+ *         up the chain of recursive nested binary operations.
+ *
  *  --------------------------------------------------------------------------
+ *
  *      LAST STEP: Determine the LHS variable of the emitted IR instruction:
  *
  *         Check this LHS source variable's counter in its Symbol. Use current
  *         counter to produce the new LHS IR variable, eg. %a_2.
  *         Increment that source variable's counter in its Symbol object.*
- *
- *  TODO: Lots of repeating code chunks in this function and the recursive binop
- *        expression processor: this->emit_auxilliary_IR_for_nested_binop().
- *        Factor it out into parameterized macros or always_inline functions.
  */
 uint8_t
 IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
