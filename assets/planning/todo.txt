@@ -18,12 +18,15 @@ Current planned efforts, in order:
 
 1. Do the first extensive code cleanup and elegance boost.
 
+  [COMPLETED]
   1.1. Give important data structures & variables better names. Also, make sure
        they get the same name across all owning classes they'll be getting
        passed on to.
 
+  [WORK IN PROGRESS]
   1.2. Get rid of bad patterns:
 
+      [WORK IN PROGRESS]
     - Clumps of bookkeeping variables being passed around, along with the data
       structure they describe, instead of having an object for said structure,
       with member functions cleanly handling adding elements, finding an
@@ -74,6 +77,12 @@ Current planned efforts, in order:
             (block_dir_ix, statement_ix++, arena_offset_to_statement);
 
         There, 4 lines reduced into 2 lines.
+
+        Also, make variable names shorter, for example index -> ix.
+        3 examples in class Code_Block_Directory_Entry.
+
+        Also put [[unlikely]] and [[likely]] blocks on the same line as the
+        if condition boolean expression where possible.
 
   1.5. Comments may need to be added, adjusted or reduced in some places.
        Go over the whole existing codebase and make sure all comments are OK.

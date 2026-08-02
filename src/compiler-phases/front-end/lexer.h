@@ -34,26 +34,24 @@ public:
 
     /* Spawns into existence these new things. */
     /* Transfers them to the Parsing Orchestrator after lexing. */
-    std::vector<Token>                 token_array;
-    std::vector<code_block_descriptor> code_block_directory;
+    std::vector<Token> token_array;
+    Code_Block_Directory code_block_directory;
 
     /* Constructor. */
     explicit Lexer(const std::string&& source_code_in)
     : current_line_ix(1), current_col_ix(1), inside_code_block(false),
       source_code(std::move(source_code_in)),
-      source_code_len(source_code.length())
+      source_code_len(source_code.length()),
+      code_block_directory(Code_Block_Directory(0, 0))
     {
         /* Reserve initial space in the std::vector for 10 thousand tokens. */
         /* This avoids excessive hidden heap allocations by the vector.     */
         token_array.reserve(10'000);
-        code_block_directory.reserve(100);
     }
 
     void Tokenize_Source_Code(void);
 
 private:
-
-    /*------------------------------------------------------------------------*/
 
     /* Functions describing how to process each Token type.                  */
     /* Note the Lexer keeps track of which line and column each token is at. */
@@ -257,8 +255,7 @@ inline void Lexer::lex_identifier_and_keyword(void)
                     std::abort();
                 }
                 inside_code_block = true;
-                code_block_directory.emplace_back
-                    (code_block_descriptor(token_array.size(), 0, 0));
+                code_block_directory.emplace_back(token_array.size(), 0, 0);
             }
             else if(k == KEYWORD_BLOCK_END)
             {
@@ -272,8 +269,9 @@ inline void Lexer::lex_identifier_and_keyword(void)
                     std::abort();
                 }
                 inside_code_block = false;
-                code_block_directory.back().end_token_index
-                    = token_array.size();
+
+                code_block_directory[code_block_directory.size() - 1]
+                    .end_token_index = token_array.size();
             }
 
             token_array.emplace_back
@@ -383,7 +381,8 @@ void Lexer::Tokenize_Source_Code(void)
      * If it's not seen for a non-last Code Block, this gets caught by the
      * code for seeing the BLOCK_START keyword.
      */
-    if(code_block_directory.back().end_token_index == 0)
+    if
+    (code_block_directory[code_block_directory.size() - 1].end_token_index == 0)
     {
         std::cout
              << "\n\n"

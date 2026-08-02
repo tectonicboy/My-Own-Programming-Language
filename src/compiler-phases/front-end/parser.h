@@ -48,7 +48,7 @@ public:
 
     /* Receives these from the Lexer. */
     std::vector<Token> token_array;
-    std::vector<code_block_descriptor> code_block_directory;
+    Code_Block_Directory code_block_directory;
 
     /* Receives this from the top-level compilation driver. */
     std::vector<std::vector<size_t>> parsing_quotas;
@@ -69,7 +69,7 @@ public:
 
     /* Constructor. */
     explicit ParsingOrchestrator
-        (std::vector<code_block_descriptor>&& code_block_dir_in,
+        (Code_Block_Directory&& code_block_dir_in,
          std::vector<Token>&& token_array_in,
          std::vector<std::vector<size_t>> parser_quotas_in)
     : token_array(std::move(token_array_in)),
@@ -132,7 +132,7 @@ class Parser {
 public:
     std::unordered_map<std::string, Symbol>* symbol_table;
 
-    std::vector<code_block_descriptor>* code_block_directory;
+    Code_Block_Directory* code_block_directory;
     std::vector<size_t>* which_blocks_to_parse;
 
     std::vector<Token>* token_array;
@@ -148,7 +148,7 @@ public:
 
     explicit
     Parser( std::unordered_map<std::string, Symbol>* symbol_table_in,
-            std::vector<code_block_descriptor>* code_block_dir_in,
+            Code_Block_Directory* code_block_dir_in,
             std::vector<size_t>* code_blocks_to_parse_in,
             std::vector<Token>* token_array_in,
             uint8_t* arena_region_in,

@@ -11,13 +11,15 @@
 #include <cerrno>
 #include <unordered_map>
 
+#include "../compiler-data-structures/bookkeeping-structures.hpp"
+#include "../compiler-data-structures/custom-mem-arena.hpp"
 
-#include "token.h"
-#include "lexer.h"
-#include "ast.h"
-#include "parser.h"
-#include "../middle-end/ir-instructions.hpp"
-#include "../middle-end/ir-generator.hpp"
+#include "../compiler-phases/front-end/token.h"
+#include "../compiler-phases/front-end/lexer.h"
+#include "../compiler-phases/front-end/ast.h"
+#include "../compiler-phases/front-end/parser.h"
+#include "../compiler-phases/middle-end/ir-instructions.hpp"
+#include "../compiler-phases/middle-end/ir-generator.hpp"
 
 int main()
 {

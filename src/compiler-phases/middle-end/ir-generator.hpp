@@ -1,38 +1,3 @@
-/* Descriptor for each entry of the IR Instructions Directory. Each Code Block
- * has one or more source statements. Each source statement gets one or more
- * emitted IR instructions that implement it in SSA IR.
- */
-class IR_Instructions_Directory_Entry {
-public:
-
-    size_t code_block_ix;
-    size_t statement_ix;
-    size_t ir_insn_ix;
-    size_t ir_insn_arena_offset;
-    size_t which_ir_instruction;
-
-    /* Constructor */
-    explicit IR_Instructions_Directory_Entry
-    (size_t code_block_ix_in, size_t statement_ix_in,
-     size_t ir_insn_ix_in,    size_t ir_insn_arena_offset_in,
-     size_t which_ir_insn_in)
-    : code_block_ix(code_block_ix_in), statement_ix(statement_ix_in),
-      ir_insn_ix(ir_insn_ix_in), ir_insn_arena_offset(ir_insn_arena_offset_in),
-      which_ir_instruction(which_ir_insn_in)
-    {}
-
-    void print_entry(void)
-    {
-        std::cout << "Code Block          : " << code_block_ix        << "\n"
-                  << "Statement           : " << statement_ix         << "\n"
-                  << "IR Instruction Index: " << ir_insn_ix           << "\n"
-                  << "IR Instruction Type : " << which_ir_instruction << "\n"
-                  << "IR Arena Offset     : " << ir_insn_arena_offset << "\n";
-        return;
-    }
-
-};
-
 /* The IR Generator and IR Generation Orchestrator classes. */
 
 /* Gives jobs to one or more IR Generators by giving them quotas for which

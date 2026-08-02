@@ -33,8 +33,8 @@ CXX     = g++
 OPTIMIZATION_LEVEL = -O3
 ARCH_FLAGS = -march=native
 
-SRC = src/front-end/compiler-hirola.cpp
-BIN = bin/front-end/compiler-hirola
+SRC = src/compiler-driver/compiler-hirola.cpp
+BIN = bin/compiler-driver/compiler-hirola
 
 lexer:
 	$(CXX) $(SRC) -o $(BIN) \
