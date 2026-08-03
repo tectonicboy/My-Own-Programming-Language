@@ -6,8 +6,8 @@
 constexpr size_t   total_code_block_types  = 1;
 constexpr uint32_t CODE_BLOCK_TYPE_PROGRAM = 0;
 
-constexpr std::array<const char*, total_code_block_types>
-code_block_type_strings =
+constexpr
+std::array<const char*, total_code_block_types> code_block_type_strings =
 {
     "primary program code block"
 };
@@ -21,22 +21,13 @@ public:
     size_t code_block_type_index;
 
     /* Constructor. */
+    explicit
     Code_Block_Directory_Entry(size_t start_ix, size_t end_ix, size_t type_ix)
     : start_token_index(start_ix), end_token_index(end_ix),
-      code_block_type_index(type_ix)
-    {
-        /* Handle error case: an invalid type index was somehow passed. */
-        if(type_ix >= total_code_block_types)
-        [[unlikely]]
-        {
-            std::cout << "\nCRITICAL: Internal compiler error. [LEXER]\n"
-                      << "Code Block ctor: Passed type ix: " << type_ix << "\n"
-                      << "Available type indices: 0 to "
-                      << total_code_block_types - 1 << "\n" << "Aborting.\n\n";
-            std::abort();
-        }
-    }
-    void print_code_block_info(void)
+      code_block_type_index(type_ix) {}
+
+    /* Pretty printer. */
+    void print_code_block_info(void) const
     {
         std::cout << "\n--------------------------------------------------"
                   << "\nCode Block Type: "
@@ -66,8 +57,7 @@ public:
      * When initializing the std::vector container itself, the caller either
      * tells us to only reserve memory capacity, or to go ahead and preconstruct
      * the entries, so the user can start writing to arbitrary indices.
-     *
-     * For now, the compiler only reserves capacity, size is still 0 at start
+     * For now, the Lexer only reserves capacity, size is still 0 at start
      * and entries are added via vector.emplace_back().
      */
     explicit
@@ -88,14 +78,13 @@ public:
     /* Move constructor.
      *
      * Used when passing ownership of the Code Block Directory from the Lexer
-     * to the Parsing Orchestrator, avoiding unnecessary copying.
+     * to the Parsing Orchestrator, avoiding wasteful copies.
      */
     Code_Block_Directory(Code_Block_Directory&& old_dir)
     : initial_capacity(old_dir.initial_capacity),
-      code_block_dir_vec(std::move(old_dir.code_block_dir_vec))
-    {}
+      code_block_dir_vec(std::move(old_dir.code_block_dir_vec)) {}
 
-    /* Overloaded operator[]. Both for getting a const and mutable a entry. */
+    /* Overloaded operator[]. Both for getting a const and a mutable entry. */
 
     /* Returns a mutable Lvalue reference to an entry, directly modifyable. */
     Code_Block_Directory_Entry& operator[](const size_t entry_ix)
@@ -108,24 +97,126 @@ public:
         return code_block_dir_vec[entry_ix];
     }
     /* Emplace an entry at the back. */
-    void emplace_back(const size_t start_token_ix,
-                      const size_t end_token_ix,
-                      const size_t code_block_type_ix)
+    inline void
+    emplace_back(const size_t start_token_ix, const size_t end_token_ix,
+                 const size_t code_block_type_ix)
     {
         code_block_dir_vec.emplace_back(Code_Block_Directory_Entry
             (start_token_ix, end_token_ix, code_block_type_ix));
         return;
     }
-    size_t size(void) const
+    inline size_t size(void) const
     {
         return code_block_dir_vec.size();
     }
 };
 
-
 /*----------------------------------------------------------------------------*/
 
 /* COMPILER BOOKKEEPING: The Statement Directory. */
+
+/* Descriptor of a single entry in the Statement Directory. */
+class Statement_Directory_Entry
+{
+public:
+    size_t code_block_ix;
+    size_t statement_ix;
+    size_t root_ast_node_arena_offset;
+
+    /* Constructor. */
+    explicit Statement_Directory_Entry
+       (size_t code_block_ix_in, size_t statement_ix_in, size_t arena_offset_in)
+    : code_block_ix(code_block_ix_in), statement_ix(statement_ix_in),
+      root_ast_node_arena_offset(arena_offset_in) {}
+
+    /* Pretty printer. */
+    void print_statement_info(void) const
+    {
+        std::cout
+        << "-------------------------------------------------------\n"
+        << "Code Block Index          : " << code_block_ix << "\n"
+        << "Statement  Index          : " << statement_ix  << "\n"
+        << "Root AST Node Arena Offset: " << root_ast_node_arena_offset
+        << " bytes.\n";
+    }
+};
+
+/* The Statement Directory.
+ *
+ * Used first in the compiler frontend spawned by a Parsing Orchestrator. A
+ * pointer to it is given to worker Parsers. Then, ownership of it goes to the
+ * IR Generation Orchestrator in the compiler middle-end, via move semantics.
+ */
+class Statement_Directory
+{
+private:
+    constexpr static size_t statement_dir_default_initial_capacity = 10'000;
+    size_t initial_capacity;
+    std::vector<Statement_Directory_Entry> statement_dir_vec;
+
+public:
+    /* Regular constructor.
+     *
+     * Pass 0 for initial_capacity_in to use default initial capacity.
+     *
+     * When initializing the std::vector container itself, the caller either
+     * tells us to only reserve memory capacity, or to go ahead and preconstruct
+     * the entries, so the user can start writing to arbitrary indices.
+     * Right now, the Parsing Orchestrator only reserves memory capacity, with
+     * .size() still starting out as 0.
+     */
+    explicit
+    Statement_Directory(size_t init_capa_in, bool prefill_default_slots)
+    {
+        if( ! init_capa_in )
+            initial_capacity = statement_dir_default_initial_capacity;
+        else
+            initial_capacity = init_capa_in;
+
+        if(prefill_default_slots)
+            statement_dir_vec = std::vector
+                (initial_capacity, Statement_Directory_Entry(0, 0, 0));
+        else
+            statement_dir_vec.reserve(initial_capacity);
+    }
+
+    /* Move constructor.
+     *
+     * Used when passing ownership of the Statement Directory from the Parsing
+     * Orchestrator to the IR Generation Orchestrator, avoiding wasteful copies.
+     */
+    Statement_Directory(Statement_Directory&& old_dir)
+    : initial_capacity(old_dir.initial_capacity),
+      statement_dir_vec(std::move(old_dir.statement_dir_vec)) {}
+
+    /* Overloaded operator[]. Both for getting a const and a mutable entry. */
+
+    /* Returns a mutable Lvalue reference to an entry, directly modifyable. */
+    Statement_Directory_Entry& operator[](const size_t entry_ix)
+    {
+        return statement_dir_vec[entry_ix];
+    }
+    /* Returns a const Lvalue reference to an entry, not modifyable. */
+    const Statement_Directory_Entry& operator[](const size_t entry_ix) const
+    {
+        return statement_dir_vec[entry_ix];
+    }
+
+    /* Emplace an entry at the back. */
+    inline void
+    emplace_back(const size_t code_block_ix_in, const size_t stmt_ix_in,
+                      const size_t root_ast_node_arena_offset_in)
+    {
+        statement_dir_vec.emplace_back(code_block_ix_in, stmt_ix_in,
+                                       root_ast_node_arena_offset_in);
+        return;
+    }
+    inline size_t size() const
+    {
+        return statement_dir_vec.size();
+    }
+};
+
 
 /*----------------------------------------------------------------------------*/
 

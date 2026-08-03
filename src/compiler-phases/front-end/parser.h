@@ -62,10 +62,8 @@ public:
     size_t   ast_arena_next_free_region_offset;
     size_t   ast_arena_used_bytes;
 
-    size_t statement_directory_size;
-    size_t statement_directory_next_free_entry;
     size_t statement_directory_used_entries;
-    std::vector<std::tuple<size_t, size_t, size_t>> statement_directory;
+    Statement_Directory statement_directory;
 
     /* Constructor. */
     explicit ParsingOrchestrator
@@ -79,11 +77,7 @@ public:
       ast_arena_size(100'000),
       ast_arena_next_free_region_offset(0),
       ast_arena_used_bytes(0),
-      statement_directory_size(10'000),
-      statement_directory_next_free_entry(0),
-      statement_directory_used_entries(0),
-      statement_directory(statement_directory_size,
-                          std::make_tuple((size_t)0, (size_t)0, (size_t)0))
+      statement_directory(Statement_Directory(0, false))
     {
         symbol_table.reserve(symbol_table_size);
 
@@ -100,13 +94,6 @@ public:
 
     uint8_t spawn_parser(std::vector<size_t> parsing_quota);
 };
-
-/*
- * TODO: Non-critical, but good for maintainability: Instead of having
- *       a vector<tuple<size_t, size_t, size_t>> for the Statement Directory,
- *       consider making each entry a struct object with 3 named data members
- *       instead of 3 size_t's. Call it Statement Descriptor perhaps.
- */
 
 /* Each parser must have:
  *
@@ -131,20 +118,13 @@ class Parser {
 
 public:
     std::unordered_map<std::string, Symbol>* symbol_table;
-
     Code_Block_Directory* code_block_directory;
     std::vector<size_t>* which_blocks_to_parse;
-
     std::vector<Token>* token_array;
-
     uint8_t*     ast_arena_free_region;
     const size_t available_arena_bytes;
     size_t*      used_arena_bytes;
-
-    std::vector<std::tuple<size_t, size_t, size_t>>* statement_directory;
-    const size_t available_stmt_dir_entries;
-    const size_t next_free_stmt_dir_entry;
-    size_t*      used_stmt_dir_entries;
+    Statement_Directory* statement_directory;
 
     explicit
     Parser( std::unordered_map<std::string, Symbol>* symbol_table_in,
@@ -154,10 +134,7 @@ public:
             uint8_t* arena_region_in,
             const size_t avail_arena_bytes_in,
             size_t* nr_used_arena_bytes_in,
-            std::vector<std::tuple<size_t, size_t, size_t>>* statement_dir_in,
-            const size_t avail_stmt_dir_entries_in,
-            const size_t next_free_stmt_dir_entry_in,
-            size_t* utilized_stmt_dir_entries_in)
+            Statement_Directory* statement_dir_in)
     : symbol_table(symbol_table_in),
       code_block_directory(code_block_dir_in),
       which_blocks_to_parse(code_blocks_to_parse_in),
@@ -165,10 +142,7 @@ public:
       ast_arena_free_region(arena_region_in),
       available_arena_bytes(avail_arena_bytes_in),
       used_arena_bytes(nr_used_arena_bytes_in),
-      statement_directory(statement_dir_in),
-      available_stmt_dir_entries(avail_stmt_dir_entries_in),
-      next_free_stmt_dir_entry(next_free_stmt_dir_entry_in),
-      used_stmt_dir_entries(utilized_stmt_dir_entries_in)
+      statement_directory(statement_dir_in)
     {}
 
     uint8_t parse_blocks();
@@ -201,15 +175,10 @@ ParsingOrchestrator::spawn_parser(std::vector<size_t> parsing_quota)
     Parser my_parser = Parser(&symbol_table, &code_block_directory,
                               &parsing_quota, &token_array,
                               ast_arena, ast_arena_size,
-                              &ast_arena_used_bytes, &statement_directory,
-                              statement_directory_size,
-                              statement_directory_next_free_entry,
-                              &statement_directory_used_entries);
+                              &ast_arena_used_bytes, &statement_directory);
 
     ret = my_parser.parse_blocks();
 
-    statement_directory_next_free_entry += statement_directory_used_entries;
-    ast_arena_next_free_region_offset   += ast_arena_used_bytes;
 
     if(ret) [[unlikely]]
     {
@@ -221,9 +190,7 @@ ParsingOrchestrator::spawn_parser(std::vector<size_t> parsing_quota)
 
     std::cout << "AST mem arena used bytes  : " << ast_arena_used_bytes << "\n";
     std::cout << "Statement dir used entries: "
-              << statement_directory_used_entries << "\n";
-    std::cout << "NEW next statement dir free entry: "
-              << statement_directory_next_free_entry << "\n";
+              << this->statement_directory.size() << "\n";
     std::cout << "NEW next AST Arena free region offset: "
               << ast_arena_next_free_region_offset << "\n";
     std::cout << "\n\n";
@@ -734,7 +701,7 @@ uint8_t Parser::parse_statement
 }
 
 uint8_t Parser::parse_statements(size_t* start_token_cursor,
-                                 size_t block_dir_ix)
+                                 size_t  block_dir_ix)
 {
     bool    last_statement_seen = false;
     bool    statement_dir_entry_adding;
@@ -752,37 +719,29 @@ uint8_t Parser::parse_statements(size_t* start_token_cursor,
 
         if(ret) [[unlikely]] { return 1; }
 
-        if(statement_dir_entry_adding){
-            (*statement_directory)
-            [next_free_stmt_dir_entry + (*used_stmt_dir_entries)]
-                = std::make_tuple
-                    (block_dir_ix, statement_ix++, arena_offset_to_statement);
-
-            ++(*used_stmt_dir_entries);
-
-            if( (*used_stmt_dir_entries) >= available_stmt_dir_entries )
-            [[unlikely]]
-            { return 1; }
+        if(statement_dir_entry_adding)
+        {
+            (*statement_directory).emplace_back
+              (block_dir_ix, statement_ix, arena_offset_to_statement);
+            ++statement_ix;
         }
-
     }
     return 0;
 }
 
-uint8_t Parser::parse_blocks(){
+uint8_t Parser::parse_blocks()
+{
     uint8_t ret;
     size_t start_cursor;
 
     for(size_t i = 0; i < which_blocks_to_parse->size(); ++i)
     {
         start_cursor = (*code_block_directory)
-                            [(*which_blocks_to_parse)[i]]
-                                .start_token_index;
+                        [(*which_blocks_to_parse)[i]].start_token_index;
 
         ret = parse_statements(&start_cursor, (*which_blocks_to_parse)[i]);
 
-        if(ret)
-        [[unlikely]]
+        if(ret) [[unlikely]]
         {
             std::cout << "[ERR] parse_statements() returned 1. Out of mem.\n\n";
             std::abort();
@@ -790,6 +749,5 @@ uint8_t Parser::parse_blocks(){
     }
 
     std::cout << "\n[OK] Parsing successful!\n\n";
-
     return 0;
 }

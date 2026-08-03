@@ -193,14 +193,14 @@ std::string first_program =
 
     std::cout << "Reconstructing the source program from the AST:\n";
 
-    size_t entries = my_parsing_orchestrator.statement_directory_used_entries;
+    size_t entries = my_parsing_orchestrator.statement_directory.size();
     size_t arena_offset;
     AST_Node_Statement_Assignment* stmt_ast_node = nullptr;
 
     for(size_t i = 0; i < entries; ++i)
     {
-        arena_offset = std::get<STMT_DIR_NODE_ARENA_OFFSET>
-                        (my_parsing_orchestrator.statement_directory[i]);
+        arena_offset = my_parsing_orchestrator.statement_directory[i]
+                        .root_ast_node_arena_offset;
 
         stmt_ast_node = (AST_Node_Statement_Assignment*)
                           (my_parsing_orchestrator.ast_arena + arena_offset);
@@ -214,7 +214,6 @@ std::string first_program =
         (std::move(my_parsing_orchestrator.symbol_table),
          my_parsing_orchestrator.ast_arena,
          std::move(my_parsing_orchestrator.statement_directory),
-         my_parsing_orchestrator.statement_directory_used_entries,
          std::move(parsing_quotas));
 
     my_ir_generation_orchestrator.spawn_IR_generator

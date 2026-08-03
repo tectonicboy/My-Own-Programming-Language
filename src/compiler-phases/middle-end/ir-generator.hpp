@@ -10,8 +10,7 @@ public:
     /* Receives these from a Parsing_Orchestrator: */
     std::unordered_map<std::string, Symbol> symbol_table;
     uint8_t* ast_arena;
-    std::vector<std::tuple<size_t, size_t, size_t>> statement_directory;
-    const size_t statement_directory_used_entries;
+    Statement_Directory statement_directory;
 
     /* Brings into existence these new things: */
     size_t   IR_instructions_arena_size;
@@ -30,10 +29,8 @@ public:
     explicit IR_Generation_Orchestrator
         (std::unordered_map<std::string, Symbol>&& sym_table_in,
          uint8_t* ast_arena_in,
-         std::vector<std::tuple<size_t, size_t, size_t>>&& statement_dir_in,
-         const size_t statement_dir_num_used_entries_in,
-         std::vector<std::vector<size_t>>&& IR_gen_quotas_in
-        )
+         Statement_Directory&& statement_dir_in,
+         std::vector<std::vector<size_t>>&& IR_gen_quotas_in)
     : symbol_table(std::move(sym_table_in)),
       /* TODO: Define the AST Arena and IR Instruction Arena and other memory
        *       arenas as classes (possibly even a generic (but not abstract)
@@ -43,7 +40,6 @@ public:
        */
       ast_arena(ast_arena_in),
       statement_directory(std::move(statement_dir_in)),
-      statement_directory_used_entries(statement_dir_num_used_entries_in),
       IR_instructions_arena_size(100'000),
       IR_instructions_arena_free_region_offset(0),
       IR_instructions_arena_used_bytes(0),
@@ -103,40 +99,13 @@ public:
  *       added. Several things will need updating then, similar to
  *       multithreaded AST generation, both are partially ready.
  */
-
-/*
- * Receives from an IR Generation Orchestrator:
- *
- *  - Quota: vector<size_t> of block indices whose AST statements to emit IR of.
- *  - Populated Auxilliary Code Block Statement Directory
- *  - Populated AST Arena
- *  - Populated Symbol Table
- *  - Byte offset to an empty region of the IR Instructions Arena
- *  - How much memory it's allowed to use in the IR Instructions Arena
- *  - Pointer to which it should write how much memory it ended up using.
- *
- * Produces:
- *
- *  - Populated IR Instructions Arena region.
- *  - Updated counter through passed pointer: Used IR instructions arena bytes.
- *
- * Its own auxilliary members:
- *
- *  - Counter: How many IR intermediates were emitted.
- *             An intermediate is emitted when the LHS and/or RHS of a
- *             binary operation is itself a binary operation.
- *
- *  - Counter: How many u64 literals have been placed in their own storage.
- *
- */
 class IR_Generator {
 
 public:
     /* Receives from an IR Generation Orchestrator: */
     std::unordered_map<std::string, Symbol>* symbol_table;
     uint8_t* ast_arena;
-    std::vector<std::tuple<size_t, size_t, size_t>>* statement_directory;
-    const size_t statement_directory_used_entries;
+    Statement_Directory* statement_directory;
     uint8_t* IR_instructions_arena;
     const size_t IR_instructions_arena_size;
     const size_t IR_instructions_arena_free_region_offset;
@@ -170,8 +139,7 @@ public:
     explicit IR_Generator
         (std::unordered_map<std::string, Symbol>* sym_table_ptr_in,
          uint8_t* ast_arena_ptr_in,
-         std::vector<std::tuple<size_t, size_t, size_t>>* statement_dir_ptr_in,
-         const size_t statement_dir_used_entries_in,
+         Statement_Directory* statement_dir_ptr_in,
          uint8_t* IR_instructions_arena_ptr_in,
          const size_t IR_instructions_arena_size_in,
          const size_t IR_instructions_arena_free_region_offset_in,
@@ -186,7 +154,6 @@ public:
     : symbol_table(sym_table_ptr_in),
       ast_arena(ast_arena_ptr_in),
       statement_directory(statement_dir_ptr_in),
-      statement_directory_used_entries(statement_dir_used_entries_in),
       IR_instructions_arena(IR_instructions_arena_ptr_in),
       IR_instructions_arena_size(IR_instructions_arena_size_in),
       IR_instructions_arena_free_region_offset
@@ -272,7 +239,6 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
     IR_Generator my_IR_generator(&(this->symbol_table),
                                  this->ast_arena,
                                  &(this->statement_directory),
-                                 this->statement_directory_used_entries,
                                  this->IR_instructions_arena,
                                  this->IR_instructions_arena_size,
                                  this->IR_instructions_arena_free_region_offset,
@@ -345,7 +311,7 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
 uint8_t IR_Generator::emit_IR(void)
 {
     uint8_t ret;
-    bool end_of_ACBSD_reached = false;
+    bool end_of_statement_dir_reached = false;
     size_t curr_statement_dir_ix = 0;
     size_t curr_quota_block_ix;
     size_t curr_ast_arena_offset;
@@ -363,28 +329,26 @@ uint8_t IR_Generator::emit_IR(void)
          */
         curr_quota_block_ix = IR_generation_quota[i];
 
-        while(std::get<STMT_DIR_BLOCK_INDEX>
-                ((*statement_directory)[curr_statement_dir_ix])
-              != curr_quota_block_ix)
+        while( (*statement_directory)[curr_statement_dir_ix].code_block_ix
+               != curr_quota_block_ix)
         {
             ++curr_statement_dir_ix;
-            if(curr_statement_dir_ix == this->statement_directory_used_entries)
+            if(curr_statement_dir_ix == (*statement_directory).size())
             [[unlikely]]
             {
                 std::cout << "IR_Generator::emit_IR : Reached end of ACBSD.\n";
-                end_of_ACBSD_reached = true;
+                end_of_statement_dir_reached = true;
                 break;
             }
         }
-        if(end_of_ACBSD_reached == true) [[unlikely]] { break; }
+        if(end_of_statement_dir_reached == true) [[unlikely]] { break; }
 
-        while(std::get<STMT_DIR_BLOCK_INDEX>
-                ((*statement_directory)[curr_statement_dir_ix])
-              == curr_quota_block_ix)
+        while( (*statement_directory)[curr_statement_dir_ix].code_block_ix
+               == curr_quota_block_ix)
         {
             /* Grab statement's AST Arena offset from Statement Directory. */
-            curr_ast_arena_offset = std::get<STMT_DIR_NODE_ARENA_OFFSET>
-                                ((*statement_directory)[curr_statement_dir_ix]);
+            curr_ast_arena_offset = (*statement_directory)
+                             [curr_statement_dir_ix].root_ast_node_arena_offset;
 
             /* Get stmt type and call its respective IR emitting function. */
             cur_stmt_ast_node =
@@ -426,18 +390,18 @@ uint8_t IR_Generator::emit_IR(void)
              * Make sure we haven't reached its end. */
             ++curr_statement_dir_ix;
 
-            if(curr_statement_dir_ix == this->statement_directory_used_entries)
+            if(curr_statement_dir_ix == (*statement_directory).size())
             [[unlikely]]
             {
                 std::cout << "IR_Generator::emit_IR : Reached end of ACBSD.\n";
-                end_of_ACBSD_reached = true;
+                end_of_statement_dir_reached = true;
                 break;
             }
         }
-        if(end_of_ACBSD_reached == true) [[unlikely]] { break; }
+        if(end_of_statement_dir_reached == true) [[unlikely]] { break; }
     }
 
-    if(end_of_ACBSD_reached == true)
+    if(end_of_statement_dir_reached == true)
         std::cout << "IR Generator: End of Statement Directory was reached.\n";
 
     std::cout << "[OK] IR Generator finished its work quota.\n"

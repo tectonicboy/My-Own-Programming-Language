@@ -1,10 +1,3 @@
-/* Named tuple indices (for use in "get<NAMED_INDEX>") into each entry of
- * the Auxilliary Code Block Statement Directory.
- */
-constexpr uint8_t STMT_DIR_BLOCK_INDEX       = 0;
-constexpr uint8_t STMT_DIR_STMT_IX           = 1;
-constexpr uint8_t STMT_DIR_NODE_ARENA_OFFSET = 2;
-
 /* Counters for total symbol kinds, statement kinds and expression kinds. */
 constexpr uint8_t TOTAL_SYMBOL_KINDS     = 2;
 constexpr uint8_t TOTAL_STATEMENT_KINDS  = 5;
@@ -52,22 +45,6 @@ expression_kinds_lookuptable =
 };
 
 /*----------------------------------------------------------------------------*/
-
-/* The class for a custom memory arena. Several are utilized in the compiler.
- * Each arena stores different sized, but related entries.
- *
- * For instance, the AST Arena holds AST Nodes for statements, for expressions
- * of type LITERAL, for expression of type Binary Operation, etc.
- */
-
-class memory_arena
-{
-public:
-
-
-
-
-};
 
 /* The Symbol class. */
 class Symbol

@@ -27,7 +27,8 @@ Current planned efforts, in order:
   1.2. Get rid of bad patterns:
 
       [WORK IN PROGRESS]
-    - Clumps of bookkeeping variables being passed around, along with the data
+      1.2.1.
+      Clumps of bookkeeping variables being passed around, along with the data
       structure they describe, instead of having an object for said structure,
       with member functions cleanly handling adding elements, finding an
       element, reallocating the data structure with more memory, etc.
@@ -39,16 +40,20 @@ Current planned efforts, in order:
         - AST Arena
         - IR Instructions Arena
 
-    - In class definitions, put the data members that won't get accessed by
+      1.2.2.
+      In class definitions, put the data members that won't get accessed by
       anything foreign to the class in private: sections.
 
-    - Repetitive code, for instance when emitting IR instructions for BinOps.
+      1.2.3.
+      Repetitive code, for instance when emitting IR instructions for BinOps.
 
-    - Inconsistent ownership transfer when moving to the next compiler phase.
+      1.2.4.
+      Inconsistent ownership transfer when moving to the next compiler phase.
       Make all ownership of large data structures be transferred via move
       semantics. So far, at these borders: Lexing -> Parsing -> IR Generation.
 
-    - Magic numbers. Put them in defines where it makes sense. For instance,
+      1.2.5.
+      Magic numbers. Put them in defines where it makes sense. For instance,
       in the Lexer class, in its constructor body we have:
       token_array.reserve(10'000);
 
