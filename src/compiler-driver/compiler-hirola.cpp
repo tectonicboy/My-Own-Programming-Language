@@ -219,7 +219,7 @@ std::string first_program =
     my_ir_generation_orchestrator.spawn_IR_generator
         (my_ir_generation_orchestrator.IR_generation_quotas[0]);
 
-    entries = my_ir_generation_orchestrator.IR_instructions_dir_used_entries;
+    entries = my_ir_generation_orchestrator.IR_instructions_directory.size();
     IR_Instructions_Directory_Entry* entry;
     size_t which_ir_insn;
     uint8_t* arena = my_ir_generation_orchestrator.IR_instructions_arena;

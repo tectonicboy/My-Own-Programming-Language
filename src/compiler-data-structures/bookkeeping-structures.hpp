@@ -205,7 +205,7 @@ public:
     /* Emplace an entry at the back. */
     inline void
     emplace_back(const size_t code_block_ix_in, const size_t stmt_ix_in,
-                      const size_t root_ast_node_arena_offset_in)
+                 const size_t root_ast_node_arena_offset_in)
     {
         statement_dir_vec.emplace_back(code_block_ix_in, stmt_ix_in,
                                        root_ast_node_arena_offset_in);
@@ -255,5 +255,79 @@ public:
                   << "IR Arena Offset     : " << ir_insn_arena_offset << "\n";
         return;
     }
+};
 
+class IR_Instructions_Directory {
+private:
+    constexpr static
+    size_t IR_instructions_dir_default_initial_capacity = 10'000;
+    size_t initial_capacity;
+    std::vector<IR_Instructions_Directory_Entry> IR_instructions_dir_vec;
+
+public:
+    /* Regular constructor.
+     *
+     * Pass 0 for initial_capacity_in to use default initial capacity.
+     *
+     * When initializing the std::vector container itself, the caller either
+     * tells us to only reserve memory capacity, or to go ahead and preconstruct
+     * the entries, so the user can start writing to arbitrary indices.
+     * Right now, the IR Generation Orchestrator only reserves memory capacity,
+     * with .size() still starting out as 0.
+     */
+    explicit
+    IR_Instructions_Directory(size_t init_capa_in, bool prefill_default_slots)
+    {
+        if( ! init_capa_in )
+            initial_capacity = IR_instructions_dir_default_initial_capacity;
+        else
+            initial_capacity = init_capa_in;
+
+        if(prefill_default_slots)
+            IR_instructions_dir_vec = std::vector
+                (initial_capacity, IR_Instructions_Directory_Entry(0,0,0,0,0));
+        else
+            IR_instructions_dir_vec.reserve(initial_capacity);
+    }
+
+    /* Move constructor.
+     *
+     * Used when passing ownership of the IR Instructions Directory from the
+     * Parsing Orchestrator to the IR Generation Orchestrator, avoiding
+     * wasteful copies.
+     */
+    IR_Instructions_Directory(IR_Instructions_Directory&& old_dir)
+    : initial_capacity(old_dir.initial_capacity),
+      IR_instructions_dir_vec(std::move(old_dir.IR_instructions_dir_vec)) {}
+
+    /* Overloaded operator[]. Both for getting a const and a mutable entry. */
+
+    /* Returns a mutable Lvalue reference to an entry, directly modifyable. */
+    IR_Instructions_Directory_Entry& operator[](const size_t entry_ix)
+    {
+        return IR_instructions_dir_vec[entry_ix];
+    }
+    /* Returns a const Lvalue reference to an entry, not modifyable. */
+    const
+    IR_Instructions_Directory_Entry& operator[](const size_t entry_ix) const
+    {
+        return IR_instructions_dir_vec[entry_ix];
+    }
+
+    /* Emplace an entry at the back. */
+    inline void
+    emplace_back
+        (const size_t code_block_ix_in, const size_t stmt_ix_in,
+         const size_t ir_insn_ix_in,    const size_t ir_insn_arena_offset_in,
+         const size_t which_ir_insn_in)
+    {
+        IR_instructions_dir_vec.emplace_back
+            (code_block_ix_in, stmt_ix_in, ir_insn_ix_in,
+             ir_insn_arena_offset_in, which_ir_insn_in);
+        return;
+    }
+    inline size_t size() const
+    {
+        return IR_instructions_dir_vec.size();
+    }
 };

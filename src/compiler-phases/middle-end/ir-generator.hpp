@@ -18,9 +18,7 @@ public:
     size_t   IR_instructions_arena_free_region_offset;
     size_t   IR_instructions_arena_used_bytes;
 
-    size_t IR_instructions_dir_init_size;
-    size_t IR_instructions_dir_used_entries;
-    std::vector<IR_Instructions_Directory_Entry> IR_instructions_directory;
+    IR_Instructions_Directory IR_instructions_directory;
 
     /* Receives this from the top-level compilation driver: */
     std::vector<std::vector<size_t>> IR_generation_quotas;
@@ -32,21 +30,12 @@ public:
          Statement_Directory&& statement_dir_in,
          std::vector<std::vector<size_t>>&& IR_gen_quotas_in)
     : symbol_table(std::move(sym_table_in)),
-      /* TODO: Define the AST Arena and IR Instruction Arena and other memory
-       *       arenas as classes (possibly even a generic (but not abstract)
-       *       class Memory_Arena or Custom_Allocator that handles the arena)
-       *       and defined a MOVE CONSTRUCTOR for it, so we can move the arenas
-       *       between the various owning Lvalues (orchestrators) neatly.
-       */
       ast_arena(ast_arena_in),
       statement_directory(std::move(statement_dir_in)),
       IR_instructions_arena_size(100'000),
       IR_instructions_arena_free_region_offset(0),
       IR_instructions_arena_used_bytes(0),
-      IR_instructions_dir_init_size(10'000),
-      IR_instructions_dir_used_entries(0),
-      IR_instructions_directory(IR_instructions_dir_init_size,
-            IR_Instructions_Directory_Entry(0, 0, 0, 0, 0)),
+      IR_instructions_directory(IR_Instructions_Directory(0, 0)),
       /* TODO: The quotas vector of vectors ownership movement is incomplete.
        *       When the ParsingOrchestrator gets it, it doesnt take ownership
        *       from the main compilation driver. Make it so that it does, and
@@ -119,10 +108,7 @@ public:
      */
     size_t* IR_instructions_arena_used_bytes;
 
-    const size_t IR_instructions_dir_first_free_entry;
-    const size_t IR_instructions_dir_available_entries;
-    std::vector<IR_Instructions_Directory_Entry>* IR_instructions_directory;
-    size_t* IR_instructions_dir_used_entries;
+    IR_Instructions_Directory* IR_instructions_directory;
 
     std::vector<size_t> IR_generation_quota;
 
@@ -145,10 +131,7 @@ public:
          const size_t IR_instructions_arena_free_region_offset_in,
          const size_t IR_instructions_arena_bytes_available_in,
          size_t* IR_instructions_arena_used_bytes_ptr_in,
-         const size_t IR_insns_dir_first_free_entry_in,
-         const size_t IR_insns_dir_available_entries_in,
-         std::vector<IR_Instructions_Directory_Entry>* IR_instructions_dir_in,
-         size_t* IR_insn_dir_used_entries_in,
+         IR_Instructions_Directory* IR_instructions_dir_in,
          std::vector<size_t> IR_generation_quota_in
         )
     : symbol_table(sym_table_ptr_in),
@@ -161,10 +144,7 @@ public:
       IR_instructions_arena_bytes_available
         (IR_instructions_arena_bytes_available_in),
       IR_instructions_arena_used_bytes(IR_instructions_arena_used_bytes_ptr_in),
-      IR_instructions_dir_first_free_entry(IR_insns_dir_first_free_entry_in),
-      IR_instructions_dir_available_entries(IR_insns_dir_available_entries_in),
       IR_instructions_directory(IR_instructions_dir_in),
-      IR_instructions_dir_used_entries(IR_insn_dir_used_entries_in),
       IR_generation_quota(IR_generation_quota_in),
       IR_intermediates_emitted(0),
       count_u64_literals_seen(0),
@@ -234,7 +214,6 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
 {
     uint8_t ret = 0;
     size_t this_generator_used_IR_arena_bytes = 0;
-    size_t this_generator_used_IR_dir_entries = 0;
 
     IR_Generator my_IR_generator(&(this->symbol_table),
                                  this->ast_arena,
@@ -248,10 +227,7 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
                                   *       multithreaded arena IR instructions
                                   *       generation gets implemented.
                                   */
-                                 0,
-                                 this->IR_instructions_directory.size(),
                                  &(this->IR_instructions_directory),
-                                 &this_generator_used_IR_dir_entries,
                                  selected_IR_generation_quota);
 
     ret = my_IR_generator.emit_IR();
@@ -282,15 +258,13 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
     {
         std::cout << "\n  ****  IR generation successful!  ****\n\n";
         std::cout << "IR Instructions emitted: "
-                  << this_generator_used_IR_dir_entries << "\n";
+                  << this->IR_instructions_directory.size() << "\n";
         std::cout << "IR Arena bytes used: "
                   << this_generator_used_IR_arena_bytes << "\n";
     }
 
     this->IR_instructions_arena_used_bytes +=
         this_generator_used_IR_arena_bytes;
-    this->IR_instructions_dir_used_entries +=
-        this_generator_used_IR_dir_entries;
 
     return 0;
 }
@@ -1080,34 +1054,21 @@ uint8_t IR_Generator::emit_IR_insn_EQU
     size_t wr_offset = *cur_wr_offset;
 
     /* Align if needed and make sure the Arena has enough memory. */
-    while
-      ( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
-       % alignof(ir_insn_equate) )
+    while( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
+           % alignof(ir_insn_equate) )
     { ++wr_offset; };
 
-    if(wr_offset + sizeof(ir_insn_equate) > bytes_available)
-    [[unlikely]]
+    if(wr_offset + sizeof(ir_insn_equate) > bytes_available) [[unlikely]]
     { return 1; }
-
-    /* Make sure the IR Instructions Directory has available entries. */
-    if(*(this->IR_instructions_dir_used_entries)
-         == this->IR_instructions_dir_available_entries)
-    [[unlikely]]
-    { return 2; }
 
     /* Construct new IR instruction in IR Arena, advance byte offset tracker. */
     new (this->IR_instructions_arena + wr_offset) ir_insn_equate(lhs, rhs);
     wr_offset += sizeof(ir_insn_equate);
 
     /* Put entry in IR Instructions Directory, bump used_entries counter. */
-    (*(this->IR_instructions_directory))
-        [*(this->IR_instructions_dir_used_entries)]
-        = IR_Instructions_Directory_Entry(code_block_ix, statement_ix,
-                                          ir_instruction_ix,
-                                          wr_offset - sizeof(ir_insn_equate),
-                                          IR_INSN_EQUATE);
-
-    ++(*(this->IR_instructions_dir_used_entries));
+    (*(this->IR_instructions_directory)).emplace_back
+        (code_block_ix, statement_ix, ir_instruction_ix,
+         wr_offset - sizeof(ir_insn_equate), IR_INSN_EQUATE);
 
     /* Update passed pointer to Arena byte offset. */
     *cur_wr_offset = wr_offset;
@@ -1124,36 +1085,22 @@ uint8_t IR_Generator::emit_IR_insn_ADD
     size_t wr_offset = *cur_wr_offset;
 
     /* Align if needed and make sure the Arena has enough memory. */
-    while
-      ( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
-       % alignof(ir_insn_add) )
+    while( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
+           % alignof(ir_insn_add) )
     { ++wr_offset; };
 
-    if(wr_offset + sizeof(ir_insn_add) > bytes_available)
-    [[unlikely]]
+    if(wr_offset + sizeof(ir_insn_add) > bytes_available) [[unlikely]]
     { return 1; }
-
-    /* Make sure the IR Instructions Directory has available entries. */
-    if(*(this->IR_instructions_dir_used_entries)
-         == this->IR_instructions_dir_available_entries)
-    [[unlikely]]
-    { return 2; }
 
     /* Construct new IR instruction in IR Arena, advance byte offset tracker. */
     new (IR_instructions_arena + wr_offset) ir_insn_add
             (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
-
     wr_offset += sizeof(ir_insn_add);
 
     /* Put entry in IR Instructions Directory, bump used_entries counter. */
-    (*(this->IR_instructions_directory))
-        [*(this->IR_instructions_dir_used_entries)]
-        = IR_Instructions_Directory_Entry(code_block_ix, statement_ix,
-                                          ir_instruction_ix,
-                                          wr_offset - sizeof(ir_insn_add),
-                                          IR_INSN_ADD);
-
-    ++(*(this->IR_instructions_dir_used_entries));
+    (*(this->IR_instructions_directory)).emplace_back
+        (code_block_ix, statement_ix, ir_instruction_ix,
+         wr_offset - sizeof(ir_insn_add), IR_INSN_ADD);
 
     /* Update passed pointer to Arena byte offset. */
     *cur_wr_offset = wr_offset;
@@ -1170,36 +1117,22 @@ uint8_t IR_Generator::emit_IR_insn_SUB
     size_t wr_offset = *cur_wr_offset;
 
     /* Align if needed and make sure the Arena has enough memory. */
-    while
-      ( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
-       % alignof(ir_insn_sub) )
+    while( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
+           % alignof(ir_insn_sub) )
     { ++wr_offset; };
 
-    if(wr_offset + sizeof(ir_insn_sub) > bytes_available)
-    [[unlikely]]
+    if(wr_offset + sizeof(ir_insn_sub) > bytes_available) [[unlikely]]
     { return 1; }
-
-    /* Make sure the IR Instructions Directory has available entries. */
-    if(*(this->IR_instructions_dir_used_entries)
-         == this->IR_instructions_dir_available_entries)
-    [[unlikely]]
-    { return 2; }
 
     /* Construct new IR instruction in IR Arena, advance byte offset tracker. */
     new (IR_instructions_arena + wr_offset) ir_insn_sub
             (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
-
     wr_offset += sizeof(ir_insn_sub);
 
     /* Put entry in IR Instructions Directory, bump used_entries counter. */
-    (*(this->IR_instructions_directory))
-        [*(this->IR_instructions_dir_used_entries)]
-        = IR_Instructions_Directory_Entry(code_block_ix, statement_ix,
-                                          ir_instruction_ix,
-                                          wr_offset - sizeof(ir_insn_sub),
-                                          IR_INSN_SUB);
-
-    ++(*(this->IR_instructions_dir_used_entries));
+    (*(this->IR_instructions_directory)).emplace_back
+        (code_block_ix, statement_ix, ir_instruction_ix,
+         wr_offset - sizeof(ir_insn_sub), IR_INSN_SUB);
 
     /* Update passed pointer to Arena byte offset. */
     *cur_wr_offset = wr_offset;
@@ -1216,36 +1149,22 @@ uint8_t IR_Generator::emit_IR_insn_MUL
     size_t wr_offset = *cur_wr_offset;
 
     /* Align if needed and make sure the Arena has enough memory. */
-    while
-      ( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
-       % alignof(ir_insn_mul) )
+    while( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
+           % alignof(ir_insn_mul) )
     { ++wr_offset; };
 
-    if(wr_offset + sizeof(ir_insn_mul) > bytes_available)
-    [[unlikely]]
+    if(wr_offset + sizeof(ir_insn_mul) > bytes_available) [[unlikely]]
     { return 1; }
-
-    /* Make sure the IR Instructions Directory has available entries. */
-    if(*(this->IR_instructions_dir_used_entries)
-         == this->IR_instructions_dir_available_entries)
-    [[unlikely]]
-    { return 2; }
 
     /* Construct new IR instruction in IR Arena, advance byte offset tracker. */
     new (IR_instructions_arena + wr_offset) ir_insn_mul
             (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
-
     wr_offset += sizeof(ir_insn_mul);
 
     /* Put entry in IR Instructions Directory, bump used_entries counter. */
-    (*(this->IR_instructions_directory))
-        [*(this->IR_instructions_dir_used_entries)]
-        = IR_Instructions_Directory_Entry(code_block_ix, statement_ix,
-                                          ir_instruction_ix,
-                                          wr_offset - sizeof(ir_insn_mul),
-                                          IR_INSN_MUL);
-
-    ++(*(this->IR_instructions_dir_used_entries));
+    (*(this->IR_instructions_directory)).emplace_back
+        (code_block_ix, statement_ix, ir_instruction_ix,
+         wr_offset - sizeof(ir_insn_mul), IR_INSN_MUL);
 
     /* Update passed pointer to Arena byte offset. */
     *cur_wr_offset = wr_offset;
@@ -1262,36 +1181,22 @@ uint8_t IR_Generator::emit_IR_insn_DIV
     size_t wr_offset = *cur_wr_offset;
 
     /* Align if needed and make sure the Arena has enough memory. */
-    while
-      ( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
-       % alignof(ir_insn_div) )
+    while( ((uintptr_t)(this->IR_instructions_arena + wr_offset))
+           % alignof(ir_insn_div) )
     { ++wr_offset; };
 
-    if(wr_offset + sizeof(ir_insn_div) > bytes_available)
-    [[unlikely]]
+    if(wr_offset + sizeof(ir_insn_div) > bytes_available) [[unlikely]]
     { return 1; }
-
-    /* Make sure the IR Instructions Directory has available entries. */
-    if(*(this->IR_instructions_dir_used_entries)
-         == this->IR_instructions_dir_available_entries)
-    [[unlikely]]
-    { return 2; }
 
     /* Construct new IR instruction in IR Arena, advance byte offset tracker. */
     new (IR_instructions_arena + wr_offset) ir_insn_div
             (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
-
     wr_offset += sizeof(ir_insn_div);
 
     /* Put entry in IR Instructions Directory, bump used_entries counter. */
-    (*(this->IR_instructions_directory))
-        [*(this->IR_instructions_dir_used_entries)]
-        = IR_Instructions_Directory_Entry(code_block_ix, statement_ix,
-                                          ir_instruction_ix,
-                                          wr_offset - sizeof(ir_insn_div),
-                                          IR_INSN_DIV);
-
-    ++(*(this->IR_instructions_dir_used_entries));
+    (*(this->IR_instructions_directory)).emplace_back
+        (code_block_ix, statement_ix, ir_instruction_ix,
+         wr_offset - sizeof(ir_insn_div), IR_INSN_DIV);
 
     /* Update passed pointer to Arena byte offset. */
     *cur_wr_offset = wr_offset;
