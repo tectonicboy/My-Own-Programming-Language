@@ -1,0 +1,32 @@
+so i have to use C++ templates for the first time because i want my memory arena class' add_entry() member function to be able to take as input and add an entry of ANY type (along with whatever arguments were supplied in order to construct the new object into the arena).
+
+I have currently:
+
+template<typename T, typename... Args>
+T* add_entry(Args&&... args)
+{
+    /* Assume this points to available memory after the
+     * last added entry, and, to keep this short, assume
+     * it has also already been properly aligned for
+     * type T's alignment requirement via alignof(T).
+     */
+    void* ptr = ready_for_usage;
+
+    /* Use the (visible at compile time from the call sites)
+     * number of args supplied for the new arena entry's ctor
+     * and the concrete type of each supplied ctor argument
+     * to pass them to the placement new function where
+     * it, in turn, passes them to the called constructor.
+     */
+    T* obj = new (ptr) T(std::forward<Args>(args)...);
+
+    return obj;
+}
+
+
+I just wanted to make sure im understanding this straight:
+
+The T here is the type of the object we wanna add to the arena, and Args is a "parameter pack" of type names, which gives us the concrete number of args given for the new entry's constructor, as well as each of their types, which the compiler was able to see from every call site of arena.add_entry() ,  and the compiler generates a brand new function definition for each combination of T  and (number + types) in Args  that it sees it being called with, right? And the Args&& is a universal reference so that we can pass both lvalues and rvalues for the new entry's constructor args, which are then EACH converted to an rvalue reference or an lvalue reference depending on what was passed for the ctor, correct?
+or am i misunderstanding something about it?
+and we have to pass both Args and args to std::forward<>()  because Args gives it the particular generated function definition (in other words the particular combination of (number + types) in Args), whereas args gives it the actual values we gave for the new entry's constructor to be called with
+.... right? lol
