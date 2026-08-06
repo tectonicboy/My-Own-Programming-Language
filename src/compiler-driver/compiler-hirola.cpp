@@ -11,6 +11,10 @@
 #include <cerrno>
 #include <unordered_map>
 
+#include <stdlib.h>
+
+#include "../auxilliary-header-files/compiler-constants.hpp"
+
 #include "../compiler-data-structures/bookkeeping-structures.hpp"
 #include "../compiler-data-structures/custom-mem-arena.hpp"
 
