@@ -173,10 +173,6 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
                                  this->ast_arena,
                                  &(this->statement_directory),
                                  &(this->IR_instructions_arena),
-                                 /* TODO: This won't be hardcoded to 0 when real
-                                  *       multithreaded arena IR instructions
-                                  *       generation gets implemented.
-                                  */
                                  &(this->IR_instructions_directory),
                                  selected_IR_generation_quota);
 
@@ -184,9 +180,9 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
 
     std::cout << "\n  ****  IR generation successful!  ****\n\n";
     std::cout << "IR Instructions emitted: "
-              << this->IR_instructions_directory.size() << "\n";
+              << IR_instructions_directory.size() << "\n";
     std::cout << "IR Arena bytes used: "
-              << this->IR_instructions_arena.wr_offset << "\n";
+              << IR_instructions_arena.wr_offset << "\n";
 
     return 0;
 }
@@ -215,7 +211,7 @@ uint8_t IR_Generator::emit_IR(void)
     AST_Node_Statement* cur_stmt_ast_node;
 
     /* Go over the quota entries and emit IR code for the given Code Blocks. */
-    for(size_t i = 0; i < this->IR_generation_quota.size(); ++i)
+    for(size_t i = 0; i < IR_generation_quota.size(); ++i)
     {
         /* Find this Code Block index's first Statement in the Auxilliary
          * Code Block Statement Directory. Go to its indicated offset into the
@@ -394,12 +390,12 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
 
         /* Look for the u64 literal in the array of already encountered ones. */
         u64_literals_encountered_arr_cur_siz =
-            this->encountered_u64_literals_array.size();
+            encountered_u64_literals_array.size();
 
         for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
         {
             if(rhs_expr_u64_literal->value
-                == this->encountered_u64_literals_array[i])
+                == encountered_u64_literals_array[i])
             {
                 literal_has_already_been_encountered = true;
                 break;
@@ -432,7 +428,7 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
             if(ret) [[unlikely]] { return ret; }
 
             /* Place the newly recorded literal in the IR bookkeeping array. */
-            this->encountered_u64_literals_array.emplace_back
+            encountered_u64_literals_array.emplace_back
                 (rhs_expr_u64_literal->value);
 
             ++insns_emitted_for_this_stmt;
@@ -497,7 +493,7 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         {
             /* Look for the u64 literal in the array of already seen ones. */
             u64_literals_encountered_arr_cur_siz =
-                this->encountered_u64_literals_array.size();
+                encountered_u64_literals_array.size();
 
             binop_lhs_expr_u64_literal =
                 (AST_Node_Expr_UINT64_Literal*)(rhs_expr_binop->lhs_expression);
@@ -506,7 +502,7 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
 
             for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
             {
-                if(literal_val == this->encountered_u64_literals_array[i])
+                if(literal_val == encountered_u64_literals_array[i])
                 {
                     literal_has_already_been_encountered = true;
                     break;
@@ -525,7 +521,7 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
                 if(ret) [[unlikely]] { return ret; }
 
                 /* Place newly recorded literal in the IR bookkeeping array. */
-                this->encountered_u64_literals_array.emplace_back(literal_val);
+                encountered_u64_literals_array.emplace_back(literal_val);
                 ++insns_emitted_for_this_stmt;
             }
         }
@@ -561,14 +557,14 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
          */
         else if(binop_lhs_expr_kind == EXPR_KIND_BIN_OPERATION)
         {
-            this->emit_auxilliary_IR_for_nested_binop
+            emit_auxilliary_IR_for_nested_binop
                  (code_block_ix, statement_ix,
                   &insns_emitted_for_this_stmt,
                   (AST_Node_Expr_BinOp*)rhs_expr_binop->lhs_expression);
 
             /* Construct the string ir_insn_operand1 here now. */
             ir_insn_operand1 = std::string("%_temp_")
-                           + std::to_string(this->IR_intermediates_emitted - 1);
+                           + std::to_string(IR_intermediates_emitted - 1);
         }
 
         /* Operand 2: might be a literal, a symbol, or a nested BinOp. */
@@ -580,7 +576,7 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         {
             /* Look for the u64 literal in the array of already seen ones. */
             u64_literals_encountered_arr_cur_siz =
-                this->encountered_u64_literals_array.size();
+                encountered_u64_literals_array.size();
 
             binop_rhs_expr_u64_literal =
                 (AST_Node_Expr_UINT64_Literal*)(rhs_expr_binop->rhs_expression);
@@ -589,7 +585,7 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
 
             for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
             {
-                if(literal_val == this->encountered_u64_literals_array[i])
+                if(literal_val == encountered_u64_literals_array[i])
                 {
                     literal_has_already_been_encountered = true;
                     break;
@@ -608,7 +604,7 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
                 if(ret) [[unlikely]] { return ret; }
 
                 /* Place newly recorded literal in the IR bookkeeping array. */
-                this->encountered_u64_literals_array.emplace_back(literal_val);
+                encountered_u64_literals_array.emplace_back(literal_val);
                 ++insns_emitted_for_this_stmt;
             }
         }
@@ -631,7 +627,7 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         /* BinOp RHS is itself a BinOp: process it in its own recursive func. */
         else if(binop_rhs_expr_kind == EXPR_KIND_BIN_OPERATION)
         {
-            ret = this->emit_auxilliary_IR_for_nested_binop
+            ret = emit_auxilliary_IR_for_nested_binop
                  (code_block_ix, statement_ix,
                   &insns_emitted_for_this_stmt,
                   (AST_Node_Expr_BinOp*)rhs_expr_binop->rhs_expression);
@@ -640,7 +636,7 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
 
             /* Construct the string ir_insn_operand2 here now. */
             ir_insn_operand2 =   std::string("%_temp_")
-                           + std::to_string(this->IR_intermediates_emitted - 1);
+                           + std::to_string(IR_intermediates_emitted - 1);
         }
 
         name_mangle_ix = stmt_node->lhs_identifier->SSA_IR_mangle_counter;
@@ -654,37 +650,36 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         sign_str = rhs_expr_binop->binary_operator;
 
         if(sign_str == "+")
-            ret = this->emit_IR_insn_ADD
+            ret = emit_IR_insn_ADD
                 (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
                  code_block_ix, statement_ix,
                  insns_emitted_for_this_stmt);
 
         else if(sign_str == "-")
-            ret = this->emit_IR_insn_SUB
+            ret = emit_IR_insn_SUB
                 (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
                  code_block_ix, statement_ix,
                  insns_emitted_for_this_stmt);
 
         else if(sign_str == "*")
-            ret = this->emit_IR_insn_MUL
+            ret = emit_IR_insn_MUL
                 (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
                  code_block_ix, statement_ix,
                  insns_emitted_for_this_stmt);
 
         else if(sign_str == "/")
-            ret = this->emit_IR_insn_DIV
+            ret = emit_IR_insn_DIV
                 (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
                  code_block_ix, statement_ix,
                  insns_emitted_for_this_stmt);
 
         if(ret) [[unlikely]] { return ret; }
 
-        /*++this->IR_intermediates_emitted;*/
         ++insns_emitted_for_this_stmt;
     }
 
-    ++(this->count_statements_it_emitted_IR_for);
-    ++(this->IR_instructions_emitted);
+    ++count_statements_it_emitted_IR_for;
+    ++IR_instructions_emitted;
     return 0;
 }
 
@@ -741,7 +736,7 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     {
         /* Look for the u64 literal in the array of already seen ones. */
         u64_literals_encountered_arr_cur_siz =
-            this->encountered_u64_literals_array.size();
+            encountered_u64_literals_array.size();
 
         binop_lhs_expr_u64_literal
             = (AST_Node_Expr_UINT64_Literal*)binop->lhs_expression;
@@ -750,7 +745,7 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
 
         for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
         {
-            if(literal_val == this->encountered_u64_literals_array[i])
+            if(literal_val == encountered_u64_literals_array[i])
             {
                 literal_has_already_been_encountered = true;
                 break;
@@ -770,7 +765,7 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
             if(ret) [[unlikely]] { return ret; }
 
             /* Place newly recorded literal in the IR bookkeeping array. */
-            this->encountered_u64_literals_array.emplace_back(literal_val);
+            encountered_u64_literals_array.emplace_back(literal_val);
             ++insns_emitted_for_this_stmt;
         }
     }
@@ -792,7 +787,7 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     /* if it's a nested binop: */
     else if(binop_lhs_expr_kind == EXPR_KIND_BIN_OPERATION)
     {
-        ret = this->emit_auxilliary_IR_for_nested_binop
+        ret = emit_auxilliary_IR_for_nested_binop
                 (code_block_ix, statement_ix,
                  &insns_emitted_for_this_stmt,
                  (AST_Node_Expr_BinOp*)binop->lhs_expression);
@@ -807,7 +802,7 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
          * bumped the counter of intermediates emitted by this IR Generator.
          */
         ir_insn_operand1 =   std::string("%_temp_")
-                           + std::to_string(this->IR_intermediates_emitted - 1);
+                           + std::to_string(IR_intermediates_emitted - 1);
     }
 
     /*------------------------------------------------------------------------*/
@@ -822,7 +817,7 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     {
         /* Look for the u64 literal in the array of already seen ones. */
         u64_literals_encountered_arr_cur_siz =
-            this->encountered_u64_literals_array.size();
+            encountered_u64_literals_array.size();
 
         binop_rhs_expr_u64_literal
             = (AST_Node_Expr_UINT64_Literal*)binop->rhs_expression;
@@ -831,7 +826,7 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
 
         for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
         {
-            if(literal_val == this->encountered_u64_literals_array[i])
+            if(literal_val == encountered_u64_literals_array[i])
             {
                 literal_has_already_been_encountered = true;
                 break;
@@ -851,7 +846,7 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
             if(ret) [[unlikely]] { return ret; }
 
             /* Place newly recorded literal in the IR bookkeeping array. */
-            this->encountered_u64_literals_array.emplace_back(literal_val);
+            encountered_u64_literals_array.emplace_back(literal_val);
             ++insns_emitted_for_this_stmt;
         }
     }
@@ -874,7 +869,7 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     /* if it's a nested binop: */
     else if(binop_rhs_expr_kind == EXPR_KIND_BIN_OPERATION)
     {
-        ret = this->emit_auxilliary_IR_for_nested_binop
+        ret = emit_auxilliary_IR_for_nested_binop
                 (code_block_ix, statement_ix,
                  &insns_emitted_for_this_stmt,
                  (AST_Node_Expr_BinOp*)binop->rhs_expression);
@@ -889,38 +884,38 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
          * bumped the counter of intermediates emitted by this IR Generator.
          */
         ir_insn_operand2 =   std::string("%_temp_")
-                           + std::to_string(this->IR_intermediates_emitted - 1);
+                           + std::to_string(IR_intermediates_emitted - 1);
     }
 
     /* OK. Now we have IR operands 1 and 2. Now construct the IR instruction
      * target and emit the auxilliary IR instruction based on sign.
      */
     ir_insn_target =   std::string("%_temp_")
-                     + std::to_string(this->IR_intermediates_emitted);
+                     + std::to_string(IR_intermediates_emitted);
 
     /* Which sign does the BinOp have? */
     sign_str = binop->binary_operator;
 
     if(sign_str == "+")
-        ret = this->emit_IR_insn_ADD
+        ret = emit_IR_insn_ADD
             (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
              code_block_ix, statement_ix,
              insns_emitted_for_this_stmt);
 
     else if(sign_str == "-")
-        ret = this->emit_IR_insn_SUB
+        ret = emit_IR_insn_SUB
             (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
              code_block_ix, statement_ix,
              insns_emitted_for_this_stmt);
 
     else if(sign_str == "*")
-        ret = this->emit_IR_insn_MUL
+        ret = emit_IR_insn_MUL
             (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
              code_block_ix, statement_ix,
              insns_emitted_for_this_stmt);
 
     else if(sign_str == "/")
-        ret = this->emit_IR_insn_DIV
+        ret = emit_IR_insn_DIV
             (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
              code_block_ix, statement_ix,
              insns_emitted_for_this_stmt);
@@ -928,7 +923,7 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     if(ret) [[unlikely]] { return ret; }
 
     ++insns_emitted_for_this_stmt;
-    ++this->IR_intermediates_emitted;
+    ++IR_intermediates_emitted;
 
     /* Update Arena byte offset and counter for IR instructions emitted for the
      * source statement currently being processed, via passed pointers.
@@ -945,7 +940,7 @@ uint8_t IR_Generator::emit_IR_insn_EQU
     size_t offset = IR_instructions_arena->add_entry<ir_insn_equate>(lhs, rhs);
 
     /* Add an entry in the IR Instructions Directory. */
-    (*(this->IR_instructions_directory)).emplace_back
+    IR_instructions_directory->emplace_back
         (code_block_ix, statement_ix, ir_instruction_ix,
          offset, IR_INSN_EQUATE);
 
@@ -962,7 +957,7 @@ uint8_t IR_Generator::emit_IR_insn_ADD
         (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
 
     /* Add an entry in the IR Instructions Directory. */
-    (*(this->IR_instructions_directory)).emplace_back
+    IR_instructions_directory->emplace_back
         (code_block_ix, statement_ix, ir_instruction_ix,
          offset, IR_INSN_ADD);
 
@@ -979,7 +974,7 @@ uint8_t IR_Generator::emit_IR_insn_SUB
         (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
 
     /* Add an entry in the IR Instructions Directory. */
-    (*(this->IR_instructions_directory)).emplace_back
+    IR_instructions_directory->emplace_back
         (code_block_ix, statement_ix, ir_instruction_ix,
          offset, IR_INSN_SUB);
 
@@ -996,7 +991,7 @@ uint8_t IR_Generator::emit_IR_insn_MUL
         (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
 
     /* Add an entry in the IR Instructions Directory. */
-    (*(this->IR_instructions_directory)).emplace_back
+    IR_instructions_directory->emplace_back
         (code_block_ix, statement_ix, ir_instruction_ix,
          offset, IR_INSN_MUL);
 
@@ -1013,7 +1008,7 @@ uint8_t IR_Generator::emit_IR_insn_DIV
         (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
 
     /* Add an entry in the IR Instructions Directory. */
-    (*(this->IR_instructions_directory)).emplace_back
+    IR_instructions_directory->emplace_back
         (code_block_ix, statement_ix, ir_instruction_ix,
          offset, IR_INSN_DIV);
 
