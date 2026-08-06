@@ -34,13 +34,14 @@ class MEM_Arena
 private:
     constexpr static size_t initial_capacity_bytes = 32'000;
     constexpr static size_t capacity_multiplier    = 4;
-    uint8_t* arena_ptr;
 
 public:
+    uint8_t*    arena_ptr;
     size_t      wr_offset;
     size_t      curr_capacity;
     std::string arena_name;
 
+    /* Constructor. */
     explicit MEM_Arena(std::string name_in)
     : wr_offset(0), curr_capacity(initial_capacity_bytes), arena_name(name_in)
     {
@@ -57,8 +58,16 @@ public:
         memset(arena_ptr, 0x00, initial_capacity_bytes);
     }
 
+    /* Destructor. */
+    ~MEM_Arena(void)
+    {
+        zero_out_arena();
+        free(arena_ptr);
+        return;
+    }
+
     /* Returns the byte offset which the new entry was placed at. */
-    template <typename T, typename Args...>
+    template <typename T, typename... Args>
     size_t add_entry(Args&&... args)
     {
         uint8_t* temp_resizing_ptr;
@@ -94,11 +103,6 @@ public:
         free(arena_ptr);
         arena_ptr = temp_resizing_ptr;
         curr_capacity *= capacity_multiplier;
-        return;
-    }
-    void delete_arena(void)
-    {
-        free(arena_ptr);
         return;
     }
     void zero_out_arena(void)

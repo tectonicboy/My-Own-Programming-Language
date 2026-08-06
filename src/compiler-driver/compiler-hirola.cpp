@@ -226,7 +226,8 @@ std::string first_program =
     entries = my_ir_generation_orchestrator.IR_instructions_directory.size();
     IR_Instructions_Directory_Entry* entry;
     size_t which_ir_insn;
-    uint8_t* arena = my_ir_generation_orchestrator.IR_instructions_arena;
+    uint8_t* arena =
+        my_ir_generation_orchestrator.IR_instructions_arena.arena_ptr;
     ir_insn_equate* insn_equ = nullptr;
     ir_insn_add*    insn_add = nullptr;
     ir_insn_sub*    insn_sub = nullptr;
