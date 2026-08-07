@@ -207,7 +207,7 @@ std::string first_program =
                         .root_ast_node_arena_offset;
 
         stmt_ast_node = (AST_Node_Statement_Assignment*)
-                          (my_parsing_orchestrator.ast_arena + arena_offset);
+                   (my_parsing_orchestrator.ast_arena.arena_ptr + arena_offset);
 
         stmt_ast_node->print_node();
 
@@ -216,7 +216,7 @@ std::string first_program =
 
     IR_Generation_Orchestrator my_ir_generation_orchestrator
         (std::move(my_parsing_orchestrator.symbol_table),
-         my_parsing_orchestrator.ast_arena,
+         std::move(my_parsing_orchestrator.ast_arena),
          std::move(my_parsing_orchestrator.statement_directory),
          std::move(parsing_quotas));
 

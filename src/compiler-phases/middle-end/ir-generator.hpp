@@ -9,7 +9,7 @@ class IR_Generation_Orchestrator {
 public:
     /* Receives these from a Parsing_Orchestrator: */
     std::unordered_map<std::string, Symbol> symbol_table;
-    uint8_t* ast_arena;
+    MEM_Arena ast_arena;
     Statement_Directory statement_directory;
 
     /* Brings into existence these new things: */
@@ -22,11 +22,11 @@ public:
     /* Constructor */
     explicit IR_Generation_Orchestrator
         (std::unordered_map<std::string, Symbol>&& sym_table_in,
-         uint8_t* ast_arena_in,
+         MEM_Arena&& ast_arena_in,
          Statement_Directory&& statement_dir_in,
          std::vector<std::vector<size_t>>&& IR_gen_quotas_in)
     : symbol_table(std::move(sym_table_in)),
-      ast_arena(ast_arena_in),
+      ast_arena(std::move(ast_arena_in)),
       statement_directory(std::move(statement_dir_in)),
       IR_instructions_arena(MEM_Arena(std::string("IR Instructions Arena"))),
       IR_instructions_directory(IR_Instructions_Directory(0, 0)),
@@ -77,7 +77,7 @@ class IR_Generator {
 public:
     /* Receives from an IR Generation Orchestrator: */
     std::unordered_map<std::string, Symbol>* symbol_table;
-    uint8_t* ast_arena;
+    MEM_Arena* ast_arena;
     Statement_Directory* statement_directory;
     MEM_Arena* IR_instructions_arena;
     IR_Instructions_Directory* IR_instructions_directory;
@@ -96,7 +96,7 @@ public:
     /* Constructor */
     explicit IR_Generator
         (std::unordered_map<std::string, Symbol>* sym_table_ptr_in,
-         uint8_t* ast_arena_ptr_in,
+         MEM_Arena* ast_arena_ptr_in,
          Statement_Directory* statement_dir_ptr_in,
          MEM_Arena* IR_instructions_arena_ptr_in,
          IR_Instructions_Directory* IR_instructions_dir_in,
@@ -170,7 +170,7 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
     uint8_t ret = 0;
 
     IR_Generator my_IR_generator(&(this->symbol_table),
-                                 this->ast_arena,
+                                 &(this->ast_arena),
                                  &(this->statement_directory),
                                  &(this->IR_instructions_arena),
                                  &(this->IR_instructions_directory),
@@ -243,8 +243,8 @@ uint8_t IR_Generator::emit_IR(void)
                              [curr_statement_dir_ix].root_ast_node_arena_offset;
 
             /* Get stmt type and call its respective IR emitting function. */
-            cur_stmt_ast_node =
-                (AST_Node_Statement*)(ast_arena + curr_ast_arena_offset);
+            cur_stmt_ast_node = (AST_Node_Statement*)
+                                 (ast_arena->arena_ptr + curr_ast_arena_offset);
 
             if
             (cur_stmt_ast_node->statement_kind_ix == STATEMENT_KIND_ASSIGNMENT)

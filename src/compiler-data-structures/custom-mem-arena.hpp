@@ -58,6 +58,23 @@ public:
         memset(arena_ptr, 0x00, initial_capacity_bytes);
     }
 
+    /* Move constructor.
+     *
+     * Used, for instance, when the AST Arena gets fully transferred from the
+     * AST Generation Orchestrator to the IR Generation Orchestrator.
+     */
+    MEM_Arena(MEM_Arena&& other_arena)
+    : arena_ptr(other_arena.arena_ptr), wr_offset(other_arena.wr_offset),
+      curr_capacity(other_arena.curr_capacity),
+      arena_name(other_arena.arena_name)
+      {
+          /* Make sure to invalidate the old arena's attributes and pointer. */
+          other_arena.arena_ptr     = nullptr;
+          other_arena.wr_offset     = 0;
+          other_arena.curr_capacity = 0;
+          other_arena.arena_name    = "INVALIDATED_MEMORY_ARENA";
+      };
+
     /* Destructor. */
     ~MEM_Arena(void)
     {
@@ -78,7 +95,7 @@ public:
         while( ((uintptr_t)(arena_ptr + wr_offset)) % alignof(T) != 0 )
             ++wr_offset;
 
-        if(wr_offset + sizeof(T) > curr_capacity) [[unlikely]]
+        while(wr_offset + sizeof(T) > curr_capacity) [[unlikely]]
             increase_arena_capacity();
 
         new (arena_ptr + wr_offset) T(std::forward<Args>(args)...);
