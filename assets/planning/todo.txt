@@ -26,7 +26,8 @@ Current planned efforts, in order:
   [WORK IN PROGRESS]
   1.2. Get rid of bad patterns:
 
-      [WORK IN PROGRESS]
+      [COMPLETED: Fantastic reductions in lines of code.                      ]
+      [           Parser was 600 lines, now 400. IR Generator 1200 -> 1000 LoC]
       1.2.1.
       Clumps of bookkeeping variables being passed around, along with the data
       structure they describe, instead of having an object for said structure,
@@ -40,10 +41,12 @@ Current planned efforts, in order:
         - AST Arena
         - IR Instructions Arena
 
+      [COMPLETED]
       1.2.2.
       In class definitions, put the data members that won't get accessed by
       anything foreign to the class in private: sections.
 
+      [WORK IN PROGRESS]
       1.2.3.
       Repetitive code, for instance when emitting IR instructions for BinOps.
 
@@ -62,11 +65,15 @@ Current planned efforts, in order:
 
   1.3. Establish a clean coding style, apply it to all existing project code.
 
-  1.4. Reduce total lines of code as much as possible. Get rid of mostly empty
-       lines of code, plenty of them in function calls with many arguments.
+  1.4. Reduce total lines of code as much as possible.
 
-       Reduce long multi-line expressions and statements by saving parts of it
-       into intermediate automatic variables. Like, in parser.h:
+       - Get rid of mostly empty lines of code, e.g. call site argument passing.
+       - Get rid of empty lines between function definitions.
+       - Get rid of unnecessary default destructor definitions.
+       - Get rid of unnecessary comments.
+
+       - Reduce long multi-line expressions and statements by saving parts of it
+         into intermediate automatic variables. Like, in parser.h:
 
        (*statement_directory)
            [next_free_stmt_dir_entry + (*used_stmt_dir_entries)]
@@ -83,11 +90,9 @@ Current planned efforts, in order:
 
         There, 4 lines reduced into 2 lines.
 
-        Also, make variable names shorter, for example index -> ix.
-        3 examples in class Code_Block_Directory_Entry.
-
-        Also put [[unlikely]] and [[likely]] blocks on the same line as the
-        if condition boolean expression where possible.
+        - Make variable names shorter, e.g. index -> ix, directory -> dir
+        - Where possible, put [[(un)likely]] blocks on same line as IF condition
+        -
 
   1.5. Comments may need to be added, adjusted or reduced in some places.
        Go over the whole existing codebase and make sure all comments are OK.

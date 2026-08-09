@@ -35,6 +35,9 @@ EMIT_ERR_IF_SYMBOL_ABSENT_OR_GET_PTR(symbols, iter, name, ptr, src_line)       \
 
 class ParsingOrchestrator
 {
+private:
+    size_t symbol_table_size;
+
 public:
 
     /* Receives these from the Lexer. */
@@ -45,7 +48,6 @@ public:
     std::vector<std::vector<size_t>> parsing_quotas;
 
     /* Brings into existence these new things. */
-    size_t symbol_table_size;
     std::unordered_map<std::string, Symbol> symbol_table;
     MEM_Arena ast_arena;
     Statement_Directory statement_directory;
@@ -55,10 +57,10 @@ public:
         (Code_Block_Directory&& code_block_dir_in,
          std::vector<Token>&& token_array_in,
          std::vector<std::vector<size_t>> parser_quotas_in)
-    : token_array(std::move(token_array_in)),
+    : symbol_table_size(10'000),
+      token_array(std::move(token_array_in)),
       code_block_directory(std::move(code_block_dir_in)),
       parsing_quotas(parser_quotas_in),
-      symbol_table_size(10'000),
       ast_arena(MEM_Arena(std::string("AST Arena"))),
       statement_directory(Statement_Directory(0, false))
     {
@@ -94,6 +96,8 @@ public:
     {}
 
     uint8_t parse_blocks();
+
+private:
     uint8_t parse_statements(size_t* start_token_cursor, size_t block_dir_ix);
 
     uint8_t parse_statement(size_t* token_cursor, size_t codeblock_dir_ix,

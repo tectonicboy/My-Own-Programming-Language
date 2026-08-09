@@ -120,6 +120,7 @@ public:
 
     uint8_t emit_IR(void);
 
+private:
     uint8_t emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
                                      const size_t code_block_ix,
                                      const size_t statement_ix);
