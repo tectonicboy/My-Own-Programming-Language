@@ -222,6 +222,26 @@ public:
 
 /* COMPILER BOOKKEEPING: The IR Instructions Directory. */
 
+/* Lookup table with named indices of the available SSA IR Instruction types. */
+
+constexpr size_t TOTAL_IR_INSN_TYPES = 5;
+
+constexpr size_t IR_INSN_EQUATE = 1;
+constexpr size_t IR_INSN_ADD    = 2;
+constexpr size_t IR_INSN_SUB    = 3;
+constexpr size_t IR_INSN_MUL    = 4;
+constexpr size_t IR_INSN_DIV    = 5;
+
+constexpr std::array<const char*, TOTAL_IR_INSN_TYPES>
+lookuptable_ir_insn_types =
+{
+    "IR Instruction EQUATE",
+    "IR Instruction ADD",
+    "IR Instruction SUB",
+    "IR Instruction MUL",
+    "IR Instruction DIV"
+};
+
 /* Descriptor for a single entry in the IR Instructions Directory.
  *
  * Each Code Block has one or more source statements. Each source statement
@@ -251,7 +271,8 @@ public:
         std::cout << "Code Block          : " << code_block_ix        << "\n"
                   << "Statement           : " << statement_ix         << "\n"
                   << "IR Instruction Index: " << ir_insn_ix           << "\n"
-                  << "IR Instruction Type : " << which_ir_instruction << "\n"
+                  << "IR Instruction Type : "
+                  << lookuptable_ir_insn_types[which_ir_instruction]  << "\n"
                   << "IR Arena Offset     : " << ir_insn_arena_offset << "\n";
         return;
     }
