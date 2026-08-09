@@ -161,6 +161,16 @@ private:
                 (std::string ir_insn_target, std::string ir_insn_operand1,
                  std::string ir_insn_operand2, const size_t code_block_ix,
                  const size_t statement_ix, const size_t ir_instruction_ix);
+
+    inline uint8_t construct_IR_operand_from_u64_literal
+      (const uint64_t val, std::string& operand_str, const size_t code_block_ix,
+       const size_t statement_ix, size_t* insns_emitted_for_stmt);
+
+    inline uint8_t emit_IR_binop_insn
+    (const std::string sign_str, const std::string ir_insn_target,
+     const std::string ir_insn_operand1, const std::string ir_insn_operand2,
+     const size_t code_block_ix, const size_t statement_ix,
+     const size_t insns_emitted_for_this_stmt);
 };
 
 
@@ -288,6 +298,73 @@ uint8_t IR_Generator::emit_IR(void)
     return 0;
 }
 
+inline uint8_t IR_Generator::construct_IR_operand_from_u64_literal
+    (const uint64_t val, std::string& operand_str, const size_t code_block_ix,
+     const size_t statement_ix, size_t* insns_emitted_for_stmt)
+{
+    bool    literal_has_already_been_encountered = false;
+    size_t  i;
+    uint8_t ret = 0;
+
+    /* Look for the u64 literal in the array of already seen ones. */
+    for(i = 0; i < encountered_u64_literals_array.size(); ++i)
+    {
+        if(val == encountered_u64_literals_array[i])
+        {
+            literal_has_already_been_encountered = true;
+            break;
+        }
+    }
+    operand_str = "%const_" + std::to_string(i);
+    if(literal_has_already_been_encountered == false)
+    {
+        ret = emit_IR_insn_EQU(operand_str, std::to_string(val), code_block_ix,
+                               statement_ix, *insns_emitted_for_stmt);
+
+        if(ret) [[unlikely]] { return ret; }
+
+        /* Place newly recorded literal in the IR literals bookkeeping array. */
+        encountered_u64_literals_array.emplace_back(val);
+        ++(*insns_emitted_for_stmt);
+    }
+    return ret;
+}
+
+inline uint8_t IR_Generator::emit_IR_binop_insn
+    (const std::string sign_str, const std::string ir_insn_target,
+     const std::string ir_insn_operand1, const std::string ir_insn_operand2,
+     const size_t code_block_ix, const size_t statement_ix,
+     const size_t insns_emitted_for_this_stmt)
+{
+    uint8_t ret;
+
+    if(sign_str == "+")
+        ret = emit_IR_insn_ADD
+            (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
+             code_block_ix, statement_ix,
+             insns_emitted_for_this_stmt);
+
+    else if(sign_str == "-")
+        ret = emit_IR_insn_SUB
+            (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
+             code_block_ix, statement_ix,
+             insns_emitted_for_this_stmt);
+
+    else if(sign_str == "*")
+        ret = emit_IR_insn_MUL
+            (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
+             code_block_ix, statement_ix,
+             insns_emitted_for_this_stmt);
+
+    else if(sign_str == "/")
+        ret = emit_IR_insn_DIV
+            (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
+             code_block_ix, statement_ix,
+             insns_emitted_for_this_stmt);
+
+    return ret;
+}
+
 /* This function emits a single IR instruction for a single Assignment Statement
  * via its AST Node. Assignments from binary operations and from literals can
  * cause more IR instructions to be emitted beforehand, as each literal that
@@ -386,54 +463,14 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
     /* Case 1. Direct assignment from a literal, e.g.  my_var = 5 */
     if(assignment_rhs_expr_kind == EXPR_KIND_UINT64_LITERAL)
     {
-        rhs_expr_u64_literal =
-            (AST_Node_Expr_UINT64_Literal*)(stmt_node->rhs_expression);
+        literal_val = ((AST_Node_Expr_UINT64_Literal*)
+                       (stmt_node->rhs_expression))->value;
 
-        /* Look for the u64 literal in the array of already encountered ones. */
-        u64_literals_encountered_arr_cur_siz =
-            encountered_u64_literals_array.size();
+        ret = construct_IR_operand_from_u64_literal
+                   (literal_val, ir_insn_operand1, code_block_ix, statement_ix,
+                    &insns_emitted_for_this_stmt);
 
-        for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
-        {
-            if(rhs_expr_u64_literal->value
-                == encountered_u64_literals_array[i])
-            {
-                literal_has_already_been_encountered = true;
-                break;
-            }
-        }
-
-        /* This works even if the literal wasn't found, in which case, i simply
-         * ends up equal to u64_literals_encountered_arr_cur_siz.
-         */
-        ir_insn_operand1 = "%const_" + std::to_string(i);
-
-        /* If this literal has never been encountered yet in the source code,
-         * emit an additional IR instruction creating an auxilliary
-         * IR variable to hold this literal, since we don't have one yet.
-         * Record the fact that we've seen this literal in the source by
-         * placing it in next entry of encountered_u64_literals_array.
-         */
-        if(literal_has_already_been_encountered == false)
-        {
-            /* Emit an additional IR instruction creating an auxilliary
-             * IR variable to hold this literal, since we don't have one yet.
-             * Record the fact that we've seen this literal in the source by
-             * placing it in next entry of encountered_u64_literals_array.
-             */
-            ret = emit_IR_insn_EQU (ir_insn_operand1,
-                                    std::to_string(rhs_expr_u64_literal->value),
-                                    code_block_ix,
-                                    statement_ix, insns_emitted_for_this_stmt);
-
-            if(ret) [[unlikely]] { return ret; }
-
-            /* Place the newly recorded literal in the IR bookkeeping array. */
-            encountered_u64_literals_array.emplace_back
-                (rhs_expr_u64_literal->value);
-
-            ++insns_emitted_for_this_stmt;
-        }
+        if(ret) [[unlikely]] { return ret; }
 
         name_mangle_ix = stmt_node->lhs_identifier->SSA_IR_mangle_counter;
 
@@ -492,39 +529,12 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         /* if it's a literal, do the same thing that case 1. does. */
         if(binop_lhs_expr_kind == EXPR_KIND_UINT64_LITERAL)
         {
-            /* Look for the u64 literal in the array of already seen ones. */
-            u64_literals_encountered_arr_cur_siz =
-                encountered_u64_literals_array.size();
-
-            binop_lhs_expr_u64_literal =
-                (AST_Node_Expr_UINT64_Literal*)(rhs_expr_binop->lhs_expression);
-
-            literal_val = binop_lhs_expr_u64_literal->value;
-
-            for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
-            {
-                if(literal_val == encountered_u64_literals_array[i])
-                {
-                    literal_has_already_been_encountered = true;
-                    break;
-                }
-            }
-
-            ir_insn_operand1 = "%const_" + std::to_string(i);
-
-            if(literal_has_already_been_encountered == false)
-            {
-                ret = emit_IR_insn_EQU
-                    (ir_insn_operand1, std::to_string(literal_val),
-                    code_block_ix, statement_ix,
-                    insns_emitted_for_this_stmt);
-
-                if(ret) [[unlikely]] { return ret; }
-
-                /* Place newly recorded literal in the IR bookkeeping array. */
-                encountered_u64_literals_array.emplace_back(literal_val);
-                ++insns_emitted_for_this_stmt;
-            }
+            literal_val = ((AST_Node_Expr_UINT64_Literal*)
+                           (rhs_expr_binop->lhs_expression))->value;
+            ret = construct_IR_operand_from_u64_literal
+                   (literal_val, ir_insn_operand1, code_block_ix, statement_ix,
+                    &insns_emitted_for_this_stmt);
+            if(ret) [[unlikely]] { return ret; }
         }
         /* if it's a source variable, do what case 2. does. */
         else if(binop_lhs_expr_kind == EXPR_KIND_IDENTIFIER)
@@ -575,39 +585,12 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         /* if it's a literal, do the same thing that case 1. does. */
         if(binop_rhs_expr_kind == EXPR_KIND_UINT64_LITERAL)
         {
-            /* Look for the u64 literal in the array of already seen ones. */
-            u64_literals_encountered_arr_cur_siz =
-                encountered_u64_literals_array.size();
-
-            binop_rhs_expr_u64_literal =
-                (AST_Node_Expr_UINT64_Literal*)(rhs_expr_binop->rhs_expression);
-
-            literal_val = binop_rhs_expr_u64_literal->value;
-
-            for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
-            {
-                if(literal_val == encountered_u64_literals_array[i])
-                {
-                    literal_has_already_been_encountered = true;
-                    break;
-                }
-            }
-
-            ir_insn_operand2 = "%const_" + std::to_string(i);
-
-            if(literal_has_already_been_encountered == false)
-            {
-                ret = emit_IR_insn_EQU
-                   (ir_insn_operand2, std::to_string(literal_val),
-                    code_block_ix, statement_ix,
-                    insns_emitted_for_this_stmt);
-
-                if(ret) [[unlikely]] { return ret; }
-
-                /* Place newly recorded literal in the IR bookkeeping array. */
-                encountered_u64_literals_array.emplace_back(literal_val);
-                ++insns_emitted_for_this_stmt;
-            }
+            literal_val = ((AST_Node_Expr_UINT64_Literal*)
+                           (rhs_expr_binop->rhs_expression))->value;
+            ret = construct_IR_operand_from_u64_literal
+                   (literal_val, ir_insn_operand2, code_block_ix, statement_ix,
+                    &insns_emitted_for_this_stmt);
+            if(ret) [[unlikely]] { return ret; }
         }
         /* if it's a source variable, do what case 2. does. */
         else if(binop_rhs_expr_kind == EXPR_KIND_IDENTIFIER)
@@ -650,29 +633,9 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         /* Which sign does the BinOp have? */
         sign_str = rhs_expr_binop->binary_operator;
 
-        if(sign_str == "+")
-            ret = emit_IR_insn_ADD
-                (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
-                 code_block_ix, statement_ix,
-                 insns_emitted_for_this_stmt);
-
-        else if(sign_str == "-")
-            ret = emit_IR_insn_SUB
-                (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
-                 code_block_ix, statement_ix,
-                 insns_emitted_for_this_stmt);
-
-        else if(sign_str == "*")
-            ret = emit_IR_insn_MUL
-                (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
-                 code_block_ix, statement_ix,
-                 insns_emitted_for_this_stmt);
-
-        else if(sign_str == "/")
-            ret = emit_IR_insn_DIV
-                (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
-                 code_block_ix, statement_ix,
-                 insns_emitted_for_this_stmt);
+        ret = emit_IR_binop_insn
+               (sign_str, ir_insn_target, ir_insn_operand1, ir_insn_operand2,
+                code_block_ix, statement_ix, insns_emitted_for_this_stmt);
 
         if(ret) [[unlikely]] { return ret; }
 
@@ -735,40 +698,11 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     /* if it's a literal: */
     if(binop_lhs_expr_kind == EXPR_KIND_UINT64_LITERAL)
     {
-        /* Look for the u64 literal in the array of already seen ones. */
-        u64_literals_encountered_arr_cur_siz =
-            encountered_u64_literals_array.size();
-
-        binop_lhs_expr_u64_literal
-            = (AST_Node_Expr_UINT64_Literal*)binop->lhs_expression;
-
-        literal_val = binop_lhs_expr_u64_literal->value;
-
-        for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
-        {
-            if(literal_val == encountered_u64_literals_array[i])
-            {
-                literal_has_already_been_encountered = true;
-                break;
-            }
-        }
-
-        ir_insn_operand1 = "%const_" + std::to_string(i);
-
-        if(literal_has_already_been_encountered == false)
-        {
-            ret = emit_IR_insn_EQU
-             (ir_insn_operand1,
-              std::to_string(literal_val),
-              code_block_ix, statement_ix,
-              insns_emitted_for_this_stmt);
-
-            if(ret) [[unlikely]] { return ret; }
-
-            /* Place newly recorded literal in the IR bookkeeping array. */
-            encountered_u64_literals_array.emplace_back(literal_val);
-            ++insns_emitted_for_this_stmt;
-        }
+        ret = construct_IR_operand_from_u64_literal
+              ( ((AST_Node_Expr_UINT64_Literal*)(binop->lhs_expression))->value,
+                 ir_insn_operand1, code_block_ix, statement_ix,
+                 &insns_emitted_for_this_stmt);
+        if(ret) [[unlikely]] { return ret; }
     }
     /* if it's a source variable: */
     else if(binop_lhs_expr_kind == EXPR_KIND_IDENTIFIER)
@@ -816,40 +750,11 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     /* if it's a literal: */
     if(binop_rhs_expr_kind == EXPR_KIND_UINT64_LITERAL)
     {
-        /* Look for the u64 literal in the array of already seen ones. */
-        u64_literals_encountered_arr_cur_siz =
-            encountered_u64_literals_array.size();
-
-        binop_rhs_expr_u64_literal
-            = (AST_Node_Expr_UINT64_Literal*)binop->rhs_expression;
-
-        literal_val = binop_rhs_expr_u64_literal->value;
-
-        for(i = 0; i < u64_literals_encountered_arr_cur_siz; ++i)
-        {
-            if(literal_val == encountered_u64_literals_array[i])
-            {
-                literal_has_already_been_encountered = true;
-                break;
-            }
-        }
-
-        ir_insn_operand2 = "%const_" + std::to_string(i);
-
-        if(literal_has_already_been_encountered == false)
-        {
-            ret = emit_IR_insn_EQU
-             (ir_insn_operand2,
-              std::to_string(literal_val),
-              code_block_ix, statement_ix,
-              insns_emitted_for_this_stmt);
-
-            if(ret) [[unlikely]] { return ret; }
-
-            /* Place newly recorded literal in the IR bookkeeping array. */
-            encountered_u64_literals_array.emplace_back(literal_val);
-            ++insns_emitted_for_this_stmt;
-        }
+        ret = construct_IR_operand_from_u64_literal
+              ( ((AST_Node_Expr_UINT64_Literal*)(binop->rhs_expression))->value,
+                 ir_insn_operand2, code_block_ix, statement_ix,
+                 &insns_emitted_for_this_stmt);
+        if(ret) [[unlikely]] { return ret; }
     }
 
     /* if it's a source variable: */
@@ -897,38 +802,14 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     /* Which sign does the BinOp have? */
     sign_str = binop->binary_operator;
 
-    if(sign_str == "+")
-        ret = emit_IR_insn_ADD
-            (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
-             code_block_ix, statement_ix,
-             insns_emitted_for_this_stmt);
-
-    else if(sign_str == "-")
-        ret = emit_IR_insn_SUB
-            (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
-             code_block_ix, statement_ix,
-             insns_emitted_for_this_stmt);
-
-    else if(sign_str == "*")
-        ret = emit_IR_insn_MUL
-            (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
-             code_block_ix, statement_ix,
-             insns_emitted_for_this_stmt);
-
-    else if(sign_str == "/")
-        ret = emit_IR_insn_DIV
-            (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
-             code_block_ix, statement_ix,
-             insns_emitted_for_this_stmt);
+    ret = emit_IR_binop_insn
+      (sign_str, ir_insn_target, ir_insn_operand1, ir_insn_operand2,
+       code_block_ix, statement_ix, insns_emitted_for_this_stmt);
 
     if(ret) [[unlikely]] { return ret; }
 
     ++insns_emitted_for_this_stmt;
     ++IR_intermediates_emitted;
-
-    /* Update Arena byte offset and counter for IR instructions emitted for the
-     * source statement currently being processed, via passed pointers.
-     */
     *passed_insns_emitted_for_stmt = insns_emitted_for_this_stmt;
     return 0;
 }
