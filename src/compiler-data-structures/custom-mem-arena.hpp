@@ -87,8 +87,6 @@ public:
     template <typename T, typename... Args>
     size_t add_entry(Args&&... args)
     {
-        uint8_t* temp_resizing_ptr;
-
         /* Align if needed. If there isn't enough remaining arena capacity,
          * resize it. Use C++ placement new to construct the new arena entry.
          */

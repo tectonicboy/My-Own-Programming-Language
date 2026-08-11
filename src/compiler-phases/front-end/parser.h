@@ -144,7 +144,6 @@ uint8_t Parser::parse_bin_op_expr(size_t* token_cursor, size_t* passed_offset)
     std::string bin_operator;
     size_t cursor = *token_cursor;
     size_t saved_ast_node_offset;
-    size_t own_node_alignment = alignof(AST_Node_Expr_BinOp);
     uint8_t ret;
 
     /* Part I. */
@@ -273,7 +272,6 @@ uint8_t Parser::parse_assignment_statement(size_t* token_cursor,
     Symbol* symbol_ptr = nullptr;
     Symbol* lhs_symbol_ptr = nullptr;
     AST_Node_Expression* rhs_expr_node_ptr = nullptr;
-    AST_Node_Statement_Assignment* statement_node_ptr = nullptr;
     size_t cursor = *token_cursor;
     const size_t lhs_symbol_cursor = cursor;
     size_t saved_ast_node_offset;

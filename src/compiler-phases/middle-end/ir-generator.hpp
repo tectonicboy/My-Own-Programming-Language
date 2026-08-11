@@ -188,6 +188,7 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
                                  selected_IR_generation_quota);
 
     ret = my_IR_generator.emit_IR();
+    if(ret) [[unlikely]] { return ret; }
 
     std::cout << "\n  ****  IR generation successful!  ****\n\n";
     std::cout << "IR Instructions emitted: "
@@ -195,7 +196,7 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
     std::cout << "IR Arena bytes used: "
               << IR_instructions_arena.wr_offset << "\n";
 
-    return 0;
+    return ret;
 }
 
 /* Top-level driving function for emitting IR for a given quota of Code Blocks.
@@ -213,7 +214,7 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
  */
 uint8_t IR_Generator::emit_IR(void)
 {
-    uint8_t ret;
+    uint8_t ret = 0;
     bool end_of_statement_dir_reached = false;
     size_t curr_statement_dir_ix = 0;
     size_t curr_quota_block_ix;
@@ -295,7 +296,7 @@ uint8_t IR_Generator::emit_IR(void)
                  "     Source statements IR code was emitted for: "
               << statements_we_emitted_IR_for << "\n";
 
-    return 0;
+    return ret;
 }
 
 inline uint8_t IR_Generator::construct_IR_operand_from_u64_literal
@@ -423,11 +424,8 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
                                      const size_t statement_ix)
 {
     uint8_t ret = 0;
-    size_t  i;
 
     /* Locals: Bookkeeping. */
-    bool         literal_has_already_been_encountered = false;
-    size_t       u64_literals_encountered_arr_cur_siz;
     size_t       insns_emitted_for_this_stmt = 0;
 
     /* The rest: Function local temporaries for convenience. */
@@ -441,7 +439,6 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
     size_t name_mangle_ix;
     /* RHS of each assignment is an expression of one of these kinds: */
     AST_Node_Expr_BinOp*          rhs_expr_binop       = nullptr;
-    AST_Node_Expr_UINT64_Literal* rhs_expr_u64_literal = nullptr;
     AST_Node_Expr_Identifier*     rhs_expr_identifier  = nullptr;
     /* May or may not have these. Assignments from literals don't have them. */
     uint64_t literal_val;
@@ -451,11 +448,9 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
     std::string ir_insn_operand2;
 
     uint8_t binop_lhs_expr_kind;
-    AST_Node_Expr_UINT64_Literal* binop_lhs_expr_u64_literal;
     AST_Node_Expr_Identifier*     binop_lhs_expr_identifier;
 
     uint8_t binop_rhs_expr_kind;
-    AST_Node_Expr_UINT64_Literal* binop_rhs_expr_u64_literal;
     AST_Node_Expr_Identifier*     binop_rhs_expr_identifier;
 
     /* Look at assignment RHS: which of the 3 cases are we dealing with? */
@@ -524,7 +519,6 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         rhs_expr_binop      = (AST_Node_Expr_BinOp*)(stmt_node->rhs_expression);
         binop_lhs_expr_kind = rhs_expr_binop->lhs_expression->expr_kind_ix;
 
-        literal_has_already_been_encountered = false;
 
         /* if it's a literal, do the same thing that case 1. does. */
         if(binop_lhs_expr_kind == EXPR_KIND_UINT64_LITERAL)
@@ -579,7 +573,6 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         }
 
         /* Operand 2: might be a literal, a symbol, or a nested BinOp. */
-        literal_has_already_been_encountered = false;
         binop_rhs_expr_kind = rhs_expr_binop->rhs_expression->expr_kind_ix;
 
         /* if it's a literal, do the same thing that case 1. does. */
@@ -661,11 +654,8 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     uint8_t ret = 0;
 
     /* Local: For loop iterations. */
-    size_t i;
 
     /* Locals: Bookkeeping. */
-    bool   literal_has_already_been_encountered;
-    size_t u64_literals_encountered_arr_cur_siz;
     size_t insns_emitted_for_this_stmt = *passed_insns_emitted_for_stmt;
 
     /* The rest: Function local temporaries for convenience and readability. */
@@ -682,17 +672,13 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     std::string binop_rhs_var;
     std::string binop_lhs_var;
     /* Have this only if a side of this BinOp is a literal. */
-    uint64_t literal_val;
 
     /* Need these when a side of the BinOp is a literal or an identifier. */
-    AST_Node_Expr_UINT64_Literal* binop_rhs_expr_u64_literal;
-    AST_Node_Expr_UINT64_Literal* binop_lhs_expr_u64_literal;
     AST_Node_Expr_Identifier*     binop_rhs_expr_identifier;
     AST_Node_Expr_Identifier*     binop_lhs_expr_identifier;
 
     /* BinOp LHS: 3 cases. */
 
-    literal_has_already_been_encountered = false;
     binop_lhs_expr_kind = binop->lhs_expression->expr_kind_ix;
 
     /* if it's a literal: */
@@ -744,7 +730,6 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
 
     /* BinOp RHS: 3 cases. */
 
-    literal_has_already_been_encountered = false;
     binop_rhs_expr_kind = binop->rhs_expression->expr_kind_ix;
 
     /* if it's a literal: */
