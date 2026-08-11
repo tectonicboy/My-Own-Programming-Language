@@ -181,7 +181,7 @@ std::string first_program =
     ParsingOrchestrator my_parsing_orchestrator
         (std::move(lexer1.code_block_directory),
          std::move(lexer1.token_array),
-         parsing_quotas);
+         std::move(parsing_quotas));
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &tv1);
 

@@ -50,10 +50,11 @@ Current planned efforts, in order:
       1.2.3.
       Repetitive code, for instance when emitting IR instructions for BinOps.
 
-      [WORK IN PROGRESS]
+      [COMPLETED]
       1.2.4.
       Remove unused variables everywhere.
 
+      [COMPLETED]
       1.2.5.
       Inconsistent ownership transfer when moving to the next compiler phase.
       Make all ownership of large data structures be transferred via move

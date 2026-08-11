@@ -56,11 +56,11 @@ public:
     explicit ParsingOrchestrator
         (Code_Block_Directory&& code_block_dir_in,
          std::vector<Token>&& token_array_in,
-         std::vector<std::vector<size_t>> parser_quotas_in)
+         std::vector<std::vector<size_t>>&& parser_quotas_in)
     : symbol_table_size(10'000),
       token_array(std::move(token_array_in)),
       code_block_directory(std::move(code_block_dir_in)),
-      parsing_quotas(parser_quotas_in),
+      parsing_quotas(std::move(parser_quotas_in)),
       ast_arena(MEM_Arena(std::string("AST Arena"))),
       statement_directory(Statement_Directory(0, false))
     {
