@@ -1,0 +1,203 @@
+================================================================================
+
+0.  A line of code should not exceed 80 characters, for boosted readability.
+
+================================================================================
+
+1.  Each new variable declaration on a new line.
+
+    For functions, they should all be at the top of the function definition.
+    Group them into commented sections if there are lots of them.
+
+================================================================================
+
+2.  If a source code statement can't fit on one 80-character line, the next
+    source code element (variable name, sign, etc) goes on a new line.
+
+    In that case, all lines except the first should be indented by at least
+    1 character after the first line's indentation.
+
+    Function argument lists and anything else that inside (), [] or {} should
+    only have the opening and closing brackets/parenthesis on different lines if
+    there's no way to fit everything inside the parentheses/brackets on one line
+    even if that has to go on a new line without filling up the line that has
+    the source code elements before the parenthesized/brackets list.
+
+    For example:
+
+    ---> DON'T DO THIS:
+
+    my_lovely_function_call(my_awesome_argument_1, my_awesome_argument_2,
+                            my_awesome_argument_3);
+
+    my_amazing_constant_index = the_class_im_referencing.member_function(arg1,
+        arg2, arg3);
+
+    ---> DO THIS INSTEAD:
+
+    my_lovely_function_call
+        (my_awesome_argument_1, my_awesome_argument_2, my_awesome_argument_3);
+
+    ^ This indentation can be less than a tab if that gives the paremthesized
+      list enough space on the line, if it wouldnt have been enough with a tab.
+
+    my_amazing_constant_index = the_class_im_referencing.member_function
+                                                         (arg1, arg2, arg3);
+
+    ^ If you have to go on a new line with function arguments, but there's
+      enough space to make them begin at the same column as the called function,
+      do that, it looks prettier. Also, you can start ".member_function" itself
+      on a new line if space doesn't allow it you to finish writing out the
+      data member name (or member function name) on the same line.
+
+    ^ Another acceptable way to write this is:
+
+    my_amazing_constant_index =
+        the_class_im_referencing.member_function(arg1, arg2, arg3);
+
+    Another example, with indexing into a collection:
+
+    my_amazing_constant_index =
+        the_class_im_referencing.data_member_array[array_index];
+
+    my_amazing_constant_index = the_class_im_referencing.data_member_array
+        [a_rather_long_descriptive_index_name];
+
+    ^ Since in the last code example there wasn't enough space to begin writing
+      the thing inside [] at the same level of the thing we're indexing, we
+      defaulted to the good old "a tab indentation or less if needed" rule.
+
+================================================================================
+
+3.  Write /* Constructor. */ and /* Destructor. */ above them in the class.
+
+================================================================================
+
+4.  Keywords and attributes like static, explicit, inline, __attribute__((XXXX))
+    can be placed on a separate line above the function they describe, with the
+    next line where the actual function signature begins not needing indents:
+
+    static inline
+    void my_function_name(defined_arg_1, defined_arg_2, defined_arg_3)
+    {
+        ... ... ...
+    }
+
+    Another example:
+
+    template <typename T, typename... Args>
+    size_t add_entry(Args&&... args)
+    {
+        ...
+    }
+
+================================================================================
+
+5. Anything that needs curly bracket blocks must have both the opening and
+   closing curly bracket on their own lines, with everything inside them
+   starting with a TAB indentation:
+
+   if(condition)
+   {
+        one;
+        two;
+        ...
+   }
+
+   An exception to that can be short if-statement, short loop bodies, etc:
+
+   if(ret > 2) [[unlikely]] { return ret; }
+
+   Since we value keeping the codebase as compact as possible.
+
+   If the one statement inside the curly brackets won't fit on the same line,
+   write it with (TAB or less) indentation on the next line w/o curly brackets:
+
+   if(condition_is_met && error_or_whatever)
+       my_function_call(argument1, argument2, argument3, argument4);
+
+================================================================================
+
+6. When adding [[likely]] [[unlikely]] to conditionals, put them on the same
+   line as the condition if possible.
+
+================================================================================
+
+7. In general, it makes it prettier to keep indentation the same:
+
+    std::cout << "IR Instructions emitted: "
+              << IR_instructions_directory.size() << "\n"
+              << "Other thing im printing:"
+              << other_thingy_im_printing_now << "\n";
+
+   Another example of identical alignment for readability and prettiness:
+
+        ir_insn_operand1 =   std::string("%") + assignment_rhs_var1
+                           + std::string("_") + std::to_string(name_mangle_ix)
+                           + std::string("\") + my_other_variable;
+
+   Another example:
+
+uint8_t IR_Generator::emit_IR_insn_ADD
+            (std::string  ir_insn_target,   std::string ir_insn_operand1,
+             std::string  ir_insn_operand2, const size_t code_block_ix,
+             const size_t statement_ix,     const size_t ir_instruction_ix)
+
+================================================================================
+
+8. Never write comments with //. Instead:
+
+   /* I am a single line comment. */
+
+   /* I am a multi
+    * line comment
+    * wohooooo.
+    */
+
+================================================================================
+
+9. If a condition piece of code needs to continue on a new line, align it
+   to start at the same indentation as the first condition line:
+
+        while( (*statement_directory)[curr_statement_dir_ix].code_block_ix
+               == curr_quota_block_ix)
+
+   If the condition itself can still be written on one line, do it like this:
+
+   while
+   (veryyyyyy long condition code like this is a long condition == ok_i_am_done)
+   {
+       ...
+   }
+
+================================================================================
+
+10. Parenthesize subexpressions if there are different signs involved, instead
+    of relying on remembering operator precedence:
+
+    ((uintptr_t)(arena_ptr + wr_offset)) % alignof(T)
+
+    Same goes for casting the result of a subexpression to a different type.
+    Parenthesize the cast result, then apply the outer operator on that.
+
+    Basically, never make the reader rely on remembering operator precedence.
+
+================================================================================
+
+11. In class definitions, the colon that starts the constructor initializer list
+    should be regularly indented, if it has to start not on the same line as
+    the constructor argument list, and if the initializer list itself has to
+    span multiple lines, the elements are indented one space after the colon:
+
+    /* Constructor */
+    explicit IR_Generation_Orchestrator
+        (std::unordered_map<std::string, Symbol>&& sym_table_in,
+         MEM_Arena&& ast_arena_in,
+         Statement_Directory&& statement_dir_in,
+         std::vector<std::vector<size_t>>&& IR_gen_quotas_in)
+    : symbol_table(std::move(sym_table_in)),
+      ast_arena(std::move(ast_arena_in)),
+      statement_directory(std::move(statement_dir_in)),
+
+================================================================================
+

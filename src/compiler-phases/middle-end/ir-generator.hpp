@@ -72,8 +72,8 @@ public:
  *       added. Several things will need updating then, similar to
  *       multithreaded AST generation, both are partially ready.
  */
-class IR_Generator {
-
+class IR_Generator
+{
 public:
     /* Receives from an IR Generation Orchestrator: */
     std::unordered_map<std::string, Symbol>* symbol_table;
@@ -167,10 +167,10 @@ private:
        const size_t statement_ix, size_t* insns_emitted_for_stmt);
 
     inline uint8_t emit_IR_binop_insn
-    (const std::string sign_str, const std::string ir_insn_target,
-     const std::string ir_insn_operand1, const std::string ir_insn_operand2,
-     const size_t code_block_ix, const size_t statement_ix,
-     const size_t insns_emitted_for_this_stmt);
+     (const std::string sign_str, const std::string ir_insn_target,
+      const std::string ir_insn_operand1, const std::string ir_insn_operand2,
+      const size_t code_block_ix, const size_t statement_ix,
+      const size_t insns_emitted_for_this_stmt);
 };
 
 
