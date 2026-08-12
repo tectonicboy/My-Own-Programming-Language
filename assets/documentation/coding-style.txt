@@ -38,7 +38,7 @@
     my_lovely_function_call
         (my_awesome_argument_1, my_awesome_argument_2, my_awesome_argument_3);
 
-    ^ This indentation can be less than a tab if that gives the paremthesized
+    ^ This indentation can be less than a tab if that gives the parenthesized
       list enough space on the line, if it wouldnt have been enough with a tab.
 
     my_amazing_constant_index = the_class_im_referencing.member_function
@@ -201,3 +201,74 @@ uint8_t IR_Generator::emit_IR_insn_ADD
 
 ================================================================================
 
+12. As a general rule of thumb, if you can write something in fewer lines of
+    code, prefer that over a pretty version of the same piece of code.
+
+    If the pretty version adds just 1 more line, feel free to use that.
+    If it adds several almost empty lines, avoid it.
+
+
+    For example, this is prettier:
+
+        statement_dir_vec.emplace_back(code_block_ix_in, stmt_ix_in,
+                                       root_ast_node_arena_offset_in);
+
+    Than this:
+
+        statement_dir_vec.emplace_back
+            (code_block_ix_in, stmt_ix_in, root_ast_node_arena_offset_in);
+
+================================================================================
+
+13. When something new starts in the code, have an empty line before it starts.
+    Keeps things more readable:
+
+    /* Emplace an entry at the back. */
+    inline void
+    emplace_back(const size_t start_token_ix, const size_t end_token_ix,
+                 const size_t code_block_type_ix)
+    {
+        code_block_dir_vec.emplace_back(Code_Block_Directory_Entry
+            (start_token_ix, end_token_ix, code_block_type_ix));
+        return;
+    }
+
+    inline size_t size(void) const
+    {
+        return code_block_dir_vec.size();
+    }
+
+================================================================================
+
+14. In large switch statements, you can save one TAB of indentation by not
+    having the cases themselves indented after the switch. When the switch
+    statement ends, the closing curly brackets should have comments next to
+    them, on their line, saying what they're closing:
+
+    START OF LARGE SWITCH STATEMENT:
+
+    /* Which token type? */
+    switch((*token_array)[cursor].token_type_ix)
+    {
+    case TOKEN_TYPE_KEYWORD:
+    {
+        /* Which keyword? */
+        if( (*token_array)[cursor].token_value
+                == reserved_keyword_strings[KEYWORD_BLOCK_START] )
+        {
+            ++cursor;
+    ... ...
+    ... ...
+
+    END OF LARGE SWITCH STATEMENT:
+
+        /* Start of assignment statement looks good. Parse it. */
+        parse_assignment_statement
+            (&cursor, statement_wr_offset_after_alignment);
+
+        *statement_dir_entry_adding = true;
+        break;
+    }
+    } /* outer switch end. */
+
+================================================================================
