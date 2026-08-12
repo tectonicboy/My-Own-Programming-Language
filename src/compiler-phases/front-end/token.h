@@ -45,33 +45,19 @@ token_type_strings =
 /*----------------------------------------------------------------------------*/
 
 /* The descriptor of a Token. Members arranged to eliminate padding bytes. */
-class Token {
+class Token
+{
 public:
-
     std::string_view  token_value;
     uint64_t          token_line_in_src;
     uint32_t          token_col_in_src;
     uint32_t          token_type_ix;
 
-    Token (std::string_view value_text, uint64_t line_in_src,
-           uint32_t col_in_src,         uint32_t type_index)
-
-        :  token_value(value_text),      token_line_in_src(line_in_src),
-           token_col_in_src(col_in_src), token_type_ix(type_index)
-    {
-        /* Handle error case: an invalid type index was somehow passed. */
-        if(type_index >= total_token_types)
-        [[unlikely]]
-        {
-            std::cout << "CRITICAL: Internal compiler error. [LEXER]\n"
-                      << "Token constructor: Passed token type index "
-                      << type_index << "\n"
-                      << "Available type indices: 0 to "
-                      << total_token_types - 1 << "\n"
-                      << "Aborting compilation.\n";
-            std::abort();
-        }
-    }
+    /* Constructor. */
+    explicit Token(std::string_view value_text, uint64_t line_in_src,
+                   uint32_t col_in_src, uint32_t type_index)
+    : token_value(value_text), token_line_in_src(line_in_src),
+      token_col_in_src(col_in_src), token_type_ix(type_index) {}
 
     void Print_Token_Info(void) const
     {

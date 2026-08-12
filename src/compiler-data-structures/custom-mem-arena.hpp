@@ -27,8 +27,6 @@
  * these root AST Nodes point to the rest of each source statement's AST Nodes.
  */
 
-#include <stdlib.h>
-
 class MEM_Arena
 {
 private:
@@ -62,18 +60,18 @@ public:
      *
      * Used, for instance, when the AST Arena gets fully transferred from the
      * AST Generation Orchestrator to the IR Generation Orchestrator.
+     * Make sure to invalidate the old arena's attributes and pointer.
      */
     MEM_Arena(MEM_Arena&& other_arena)
     : arena_ptr(other_arena.arena_ptr), wr_offset(other_arena.wr_offset),
       curr_capacity(other_arena.curr_capacity),
       arena_name(other_arena.arena_name)
-      {
-          /* Make sure to invalidate the old arena's attributes and pointer. */
-          other_arena.arena_ptr     = nullptr;
-          other_arena.wr_offset     = 0;
-          other_arena.curr_capacity = 0;
-          other_arena.arena_name    = "INVALIDATED_MEMORY_ARENA";
-      };
+    {
+        other_arena.arena_ptr     = nullptr;
+        other_arena.wr_offset     = 0;
+        other_arena.curr_capacity = 0;
+        other_arena.arena_name    = "INVALIDATED_MEMORY_ARENA";
+    };
 
     /* Destructor. */
     ~MEM_Arena(void)
@@ -101,6 +99,7 @@ public:
 
         return (wr_offset - sizeof(T));
     }
+
     void increase_arena_capacity(void)
     {
         uint8_t* temp_resizing_ptr = (uint8_t*) aligned_alloc
@@ -120,25 +119,10 @@ public:
         curr_capacity *= capacity_multiplier;
         return;
     }
+
     void zero_out_arena(void)
     {
         memset(arena_ptr, 0x00, curr_capacity);
         return;
     }
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

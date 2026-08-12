@@ -1,3 +1,5 @@
+/* THROWAWAY TEMPORARY EXAMPLE C++ CODE TO DRIVE CURRENT COMPILER PHASES. */
+
 #include <new>
 #include <string>
 #include <vector>

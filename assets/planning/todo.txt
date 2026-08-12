@@ -60,9 +60,10 @@ Current planned efforts, in order:
       Make all ownership of large data structures be transferred via move
       semantics. So far, at these borders: Lexing -> Parsing -> IR Generation.
 
-  [WORK IN PROGRESS]
+  [COMPLETED
   1.3. Establish a clean coding style, apply it to all existing project code.
 
+  [WORK IN PROGRESS]
   1.4. Reduce total lines of code as much as possible.
 
        - Get rid of mostly empty lines of code, e.g. call site argument passing.

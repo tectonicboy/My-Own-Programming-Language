@@ -4,7 +4,8 @@
  * Code Block's statement AST Nodes to emit IR instructions for, and their own
  * regions of the IR Instructions Arena to emit their IR code into.
  */
-class IR_Generation_Orchestrator {
+class IR_Generation_Orchestrator
+{
 
 public:
     /* Receives these from a Parsing_Orchestrator: */
@@ -22,19 +23,12 @@ public:
     /* Constructor */
     explicit IR_Generation_Orchestrator
         (std::unordered_map<std::string, Symbol>&& sym_table_in,
-         MEM_Arena&& ast_arena_in,
-         Statement_Directory&& statement_dir_in,
+         MEM_Arena&& ast_arena_in, Statement_Directory&& statement_dir_in,
          std::vector<std::vector<size_t>>&& IR_gen_quotas_in)
-    : symbol_table(std::move(sym_table_in)),
-      ast_arena(std::move(ast_arena_in)),
+    : symbol_table(std::move(sym_table_in)), ast_arena(std::move(ast_arena_in)),
       statement_directory(std::move(statement_dir_in)),
       IR_instructions_arena(MEM_Arena(std::string("IR Instructions Arena"))),
       IR_instructions_directory(IR_Instructions_Directory(0, 0)),
-      /* TODO: The quotas vector of vectors ownership movement is incomplete.
-       *       When the ParsingOrchestrator gets it, it doesnt take ownership
-       *       from the main compilation driver. Make it so that it does, and
-       *       then it transfers that ownership to here when AST is constructed.
-       */
       IR_generation_quotas(std::move(IR_gen_quotas_in)) {}
 
     uint8_t spawn_IR_generator(std::vector<size_t> IR_generation_quota);
@@ -74,14 +68,13 @@ public:
  */
 class IR_Generator
 {
-public:
+private:
     /* Receives from an IR Generation Orchestrator: */
     std::unordered_map<std::string, Symbol>* symbol_table;
     MEM_Arena* ast_arena;
     Statement_Directory* statement_directory;
     MEM_Arena* IR_instructions_arena;
     IR_Instructions_Directory* IR_instructions_directory;
-
     std::vector<size_t> IR_generation_quota;
 
     size_t IR_intermediates_emitted;
@@ -93,23 +86,20 @@ public:
     size_t              encountered_u64_literals_array_cur_size;
     std::vector<size_t> encountered_u64_literals_array;
 
+public:
     /* Constructor */
     explicit IR_Generator
         (std::unordered_map<std::string, Symbol>* sym_table_ptr_in,
-         MEM_Arena* ast_arena_ptr_in,
-         Statement_Directory* statement_dir_ptr_in,
+         MEM_Arena* ast_arena_ptr_in, Statement_Directory* statement_dir_ptr_in,
          MEM_Arena* IR_instructions_arena_ptr_in,
          IR_Instructions_Directory* IR_instructions_dir_in,
          std::vector<size_t> IR_generation_quota_in)
-    : symbol_table(sym_table_ptr_in),
-      ast_arena(ast_arena_ptr_in),
+    : symbol_table(sym_table_ptr_in), ast_arena(ast_arena_ptr_in),
       statement_directory(statement_dir_ptr_in),
       IR_instructions_arena(IR_instructions_arena_ptr_in),
       IR_instructions_directory(IR_instructions_dir_in),
-      IR_generation_quota(IR_generation_quota_in),
-      IR_intermediates_emitted(0),
-      count_u64_literals_seen(0),
-      IR_instructions_emitted(0),
+      IR_generation_quota(IR_generation_quota_in), IR_intermediates_emitted(0),
+      count_u64_literals_seen(0), IR_instructions_emitted(0),
       count_statements_it_emitted_IR_for(0),
       encountered_u64_literals_array_init_size(1'000),
       encountered_u64_literals_array_cur_size(0)
@@ -121,16 +111,16 @@ public:
     uint8_t emit_IR(void);
 
 private:
-    uint8_t emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
-                                     const size_t code_block_ix,
-                                     const size_t statement_ix);
+    uint8_t emit_IR_for_assignment
+                (AST_Node_Statement_Assignment* stmt_node,
+                 const size_t code_block_ix, const size_t statement_ix);
 
     /* If this function is called, at least one auxilliary IR instruction has to
      * be emitted to store the result of a nested binary operation. More of them
      * if the input BinOp AST Node contains more nested BinOps.
      */
     uint8_t emit_auxilliary_IR_for_nested_binop
-            (const size_t code_block_ix,    const size_t statement_ix,
+            (const size_t code_block_ix, const size_t statement_ix,
              size_t* passed_insns_emitted_for_stmt, AST_Node_Expr_BinOp* binop);
 
     /* The IR instruction emitter functions will handle any padding bytes
@@ -180,12 +170,10 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
 {
     uint8_t ret = 0;
 
-    IR_Generator my_IR_generator(&(this->symbol_table),
-                                 &(this->ast_arena),
-                                 &(this->statement_directory),
-                                 &(this->IR_instructions_arena),
-                                 &(this->IR_instructions_directory),
-                                 selected_IR_generation_quota);
+    IR_Generator my_IR_generator
+       (&(this->symbol_table), &(this->ast_arena), &(this->statement_directory),
+        &(this->IR_instructions_arena), &(this->IR_instructions_directory),
+        selected_IR_generation_quota);
 
     ret = my_IR_generator.emit_IR();
     if(ret) [[unlikely]] { return ret; }
@@ -317,11 +305,11 @@ inline uint8_t IR_Generator::construct_IR_operand_from_u64_literal
         }
     }
     operand_str = "%const_" + std::to_string(i);
+
     if(literal_has_already_been_encountered == false)
     {
         ret = emit_IR_insn_EQU(operand_str, std::to_string(val), code_block_ix,
                                statement_ix, *insns_emitted_for_stmt);
-
         if(ret) [[unlikely]] { return ret; }
 
         /* Place newly recorded literal in the IR literals bookkeeping array. */
@@ -341,27 +329,23 @@ inline uint8_t IR_Generator::emit_IR_binop_insn
 
     if(sign_str == "+")
         ret = emit_IR_insn_ADD
-            (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
-             code_block_ix, statement_ix,
-             insns_emitted_for_this_stmt);
+                (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
+                 code_block_ix, statement_ix, insns_emitted_for_this_stmt);
 
     else if(sign_str == "-")
         ret = emit_IR_insn_SUB
-            (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
-             code_block_ix, statement_ix,
-             insns_emitted_for_this_stmt);
+                (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
+                 code_block_ix, statement_ix, insns_emitted_for_this_stmt);
 
     else if(sign_str == "*")
         ret = emit_IR_insn_MUL
-            (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
-             code_block_ix, statement_ix,
-             insns_emitted_for_this_stmt);
+                (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
+                 code_block_ix, statement_ix, insns_emitted_for_this_stmt);
 
     else if(sign_str == "/")
         ret = emit_IR_insn_DIV
-            (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
-             code_block_ix, statement_ix,
-             insns_emitted_for_this_stmt);
+                (ir_insn_target, ir_insn_operand1, ir_insn_operand2,
+                 code_block_ix, statement_ix, insns_emitted_for_this_stmt);
 
     return ret;
 }
@@ -419,9 +403,9 @@ inline uint8_t IR_Generator::emit_IR_binop_insn
  *         Increment that source variable's counter in its Symbol object.*
  */
 uint8_t
-IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
-                                     const size_t code_block_ix,
-                                     const size_t statement_ix)
+IR_Generator::emit_IR_for_assignment
+    (AST_Node_Statement_Assignment* stmt_node, const size_t code_block_ix,
+     const size_t statement_ix)
 {
     uint8_t ret = 0;
 
@@ -438,20 +422,18 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
     std::string sign_str;
     size_t name_mangle_ix;
     /* RHS of each assignment is an expression of one of these kinds: */
-    AST_Node_Expr_BinOp*          rhs_expr_binop       = nullptr;
-    AST_Node_Expr_Identifier*     rhs_expr_identifier  = nullptr;
+    AST_Node_Expr_BinOp*      rhs_expr_binop       = nullptr;
+    AST_Node_Expr_Identifier* rhs_expr_identifier  = nullptr;
     /* May or may not have these. Assignments from literals don't have them. */
     uint64_t literal_val;
     std::string assignment_rhs_var1;
     std::string assignment_rhs_var2;
     /* Only have these if the assignment RHS is a BinOp. */
     std::string ir_insn_operand2;
-
     uint8_t binop_lhs_expr_kind;
-    AST_Node_Expr_Identifier*     binop_lhs_expr_identifier;
-
     uint8_t binop_rhs_expr_kind;
-    AST_Node_Expr_Identifier*     binop_rhs_expr_identifier;
+    AST_Node_Expr_Identifier* binop_lhs_expr_identifier;
+    AST_Node_Expr_Identifier* binop_rhs_expr_identifier;
 
     /* Look at assignment RHS: which of the 3 cases are we dealing with? */
 
@@ -464,7 +446,6 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         ret = construct_IR_operand_from_u64_literal
                    (literal_val, ir_insn_operand1, code_block_ix, statement_ix,
                     &insns_emitted_for_this_stmt);
-
         if(ret) [[unlikely]] { return ret; }
 
         name_mangle_ix = stmt_node->lhs_identifier->SSA_IR_mangle_counter;
@@ -473,12 +454,8 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
                std::string("%") + assignment_lhs_src_var + std::string("_")
              + std::to_string(name_mangle_ix);
 
-        ret = emit_IR_insn_EQU
-                (ir_insn_target,
-                ir_insn_operand1,
-                code_block_ix, statement_ix,
-                insns_emitted_for_this_stmt);
-
+        ret = emit_IR_insn_EQU(ir_insn_target, ir_insn_operand1, code_block_ix,
+                               statement_ix, insns_emitted_for_this_stmt);
         if(ret) [[unlikely]] { return ret; }
 
         ++insns_emitted_for_this_stmt;
@@ -502,10 +479,8 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         ir_insn_target =   std::string("%") + assignment_lhs_src_var
                          + std::string("_") + std::to_string(name_mangle_ix);
 
-        ret = emit_IR_insn_EQU
-                (ir_insn_target, ir_insn_operand1,
-                 code_block_ix, statement_ix,insns_emitted_for_this_stmt);
-
+        ret = emit_IR_insn_EQU(ir_insn_target, ir_insn_operand1, code_block_ix,
+                               statement_ix, insns_emitted_for_this_stmt);
         if(ret) [[unlikely]] { return ret; }
 
         ++insns_emitted_for_this_stmt;
@@ -519,12 +494,12 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         rhs_expr_binop      = (AST_Node_Expr_BinOp*)(stmt_node->rhs_expression);
         binop_lhs_expr_kind = rhs_expr_binop->lhs_expression->expr_kind_ix;
 
-
         /* if it's a literal, do the same thing that case 1. does. */
         if(binop_lhs_expr_kind == EXPR_KIND_UINT64_LITERAL)
         {
             literal_val = ((AST_Node_Expr_UINT64_Literal*)
                            (rhs_expr_binop->lhs_expression))->value;
+
             ret = construct_IR_operand_from_u64_literal
                    (literal_val, ir_insn_operand1, code_block_ix, statement_ix,
                     &insns_emitted_for_this_stmt);
@@ -542,9 +517,9 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
             name_mangle_ix =
                 binop_lhs_expr_identifier->symbol->SSA_IR_mangle_counter - 1;
 
-            ir_insn_operand1 = std::string("%") + assignment_rhs_var1
-                             + std::string("_")
-                             + std::to_string(name_mangle_ix);
+            ir_insn_operand1 =
+                  std::string("%") + assignment_rhs_var1
+                + std::string("_") + std::to_string(name_mangle_ix);
         }
         /* If operand 1 is itself a BinOp, process that in its own recursive
          * function. It might not have to recurse at all if it's just like
@@ -563,13 +538,12 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         else if(binop_lhs_expr_kind == EXPR_KIND_BIN_OPERATION)
         {
             emit_auxilliary_IR_for_nested_binop
-                 (code_block_ix, statement_ix,
-                  &insns_emitted_for_this_stmt,
-                  (AST_Node_Expr_BinOp*)rhs_expr_binop->lhs_expression);
+                (code_block_ix, statement_ix, &insns_emitted_for_this_stmt,
+                 (AST_Node_Expr_BinOp*)rhs_expr_binop->lhs_expression);
 
             /* Construct the string ir_insn_operand1 here now. */
-            ir_insn_operand1 = std::string("%_temp_")
-                           + std::to_string(IR_intermediates_emitted - 1);
+            ir_insn_operand1 =   std::string("%_temp_")
+                               + std::to_string(IR_intermediates_emitted - 1);
         }
 
         /* Operand 2: might be a literal, a symbol, or a nested BinOp. */
@@ -580,6 +554,7 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         {
             literal_val = ((AST_Node_Expr_UINT64_Literal*)
                            (rhs_expr_binop->rhs_expression))->value;
+
             ret = construct_IR_operand_from_u64_literal
                    (literal_val, ir_insn_operand2, code_block_ix, statement_ix,
                     &insns_emitted_for_this_stmt);
@@ -597,23 +572,21 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
             name_mangle_ix =
                 binop_rhs_expr_identifier->symbol->SSA_IR_mangle_counter - 1;
 
-            ir_insn_operand2 =   std::string("%") + assignment_rhs_var2
-                               + std::string("_")
-                               + std::to_string(name_mangle_ix);
+            ir_insn_operand2 =
+                  std::string("%") + assignment_rhs_var2
+                + std::string("_") + std::to_string(name_mangle_ix);
         }
         /* BinOp RHS is itself a BinOp: process it in its own recursive func. */
         else if(binop_rhs_expr_kind == EXPR_KIND_BIN_OPERATION)
         {
             ret = emit_auxilliary_IR_for_nested_binop
-                 (code_block_ix, statement_ix,
-                  &insns_emitted_for_this_stmt,
-                  (AST_Node_Expr_BinOp*)rhs_expr_binop->rhs_expression);
-
+                    (code_block_ix, statement_ix, &insns_emitted_for_this_stmt,
+                     (AST_Node_Expr_BinOp*)rhs_expr_binop->rhs_expression);
             if(ret) [[unlikely]] { return ret; }
 
             /* Construct the string ir_insn_operand2 here now. */
             ir_insn_operand2 =   std::string("%_temp_")
-                           + std::to_string(IR_intermediates_emitted - 1);
+                               + std::to_string(IR_intermediates_emitted - 1);
         }
 
         name_mangle_ix = stmt_node->lhs_identifier->SSA_IR_mangle_counter;
@@ -629,7 +602,6 @@ IR_Generator::emit_IR_for_assignment(AST_Node_Statement_Assignment* stmt_node,
         ret = emit_IR_binop_insn
                (sign_str, ir_insn_target, ir_insn_operand1, ir_insn_operand2,
                 code_block_ix, statement_ix, insns_emitted_for_this_stmt);
-
         if(ret) [[unlikely]] { return ret; }
 
         ++insns_emitted_for_this_stmt;
@@ -671,14 +643,12 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     /* Have these only if a side of this BinOp is a source variable. */
     std::string binop_rhs_var;
     std::string binop_lhs_var;
-    /* Have this only if a side of this BinOp is a literal. */
 
     /* Need these when a side of the BinOp is a literal or an identifier. */
     AST_Node_Expr_Identifier*     binop_rhs_expr_identifier;
     AST_Node_Expr_Identifier*     binop_lhs_expr_identifier;
 
     /* BinOp LHS: 3 cases. */
-
     binop_lhs_expr_kind = binop->lhs_expression->expr_kind_ix;
 
     /* if it's a literal: */
@@ -712,7 +682,6 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
                 (code_block_ix, statement_ix,
                  &insns_emitted_for_this_stmt,
                  (AST_Node_Expr_BinOp*)binop->lhs_expression);
-
         if(ret) [[unlikely]] { return ret; }
 
         /* Construct the string ir_insn_operand1 here now. It will be an aux IR
@@ -729,7 +698,6 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     /*------------------------------------------------------------------------*/
 
     /* BinOp RHS: 3 cases. */
-
     binop_rhs_expr_kind = binop->rhs_expression->expr_kind_ix;
 
     /* if it's a literal: */
@@ -753,9 +721,9 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
         name_mangle_ix =
             binop_rhs_expr_identifier->symbol->SSA_IR_mangle_counter - 1;
 
-        ir_insn_operand2 =   std::string("%") + binop_rhs_var
-                           + std::string("_")
-                           + std::to_string(name_mangle_ix);
+        ir_insn_operand2 =
+              std::string("%") + binop_rhs_var
+            + std::string("_") + std::to_string(name_mangle_ix);
     }
     /* if it's a nested binop: */
     else if(binop_rhs_expr_kind == EXPR_KIND_BIN_OPERATION)
@@ -764,7 +732,6 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
                 (code_block_ix, statement_ix,
                  &insns_emitted_for_this_stmt,
                  (AST_Node_Expr_BinOp*)binop->rhs_expression);
-
         if(ret) [[unlikely]] { return ret; }
 
         /* Construct the string ir_insn_operand1 here now. It will be an aux IR
@@ -790,7 +757,6 @@ uint8_t IR_Generator::emit_auxilliary_IR_for_nested_binop
     ret = emit_IR_binop_insn
       (sign_str, ir_insn_target, ir_insn_operand1, ir_insn_operand2,
        code_block_ix, statement_ix, insns_emitted_for_this_stmt);
-
     if(ret) [[unlikely]] { return ret; }
 
     ++insns_emitted_for_this_stmt;
@@ -808,8 +774,7 @@ uint8_t IR_Generator::emit_IR_insn_EQU
 
     /* Add an entry in the IR Instructions Directory. */
     IR_instructions_directory->emplace_back
-        (code_block_ix, statement_ix, ir_instruction_ix,
-         offset, IR_INSN_EQUATE);
+       (code_block_ix, statement_ix, ir_instruction_ix, offset, IR_INSN_EQUATE);
 
     return 0;
 }
@@ -825,8 +790,7 @@ uint8_t IR_Generator::emit_IR_insn_ADD
 
     /* Add an entry in the IR Instructions Directory. */
     IR_instructions_directory->emplace_back
-        (code_block_ix, statement_ix, ir_instruction_ix,
-         offset, IR_INSN_ADD);
+        (code_block_ix, statement_ix, ir_instruction_ix, offset, IR_INSN_ADD);
 
     return 0;
 }
@@ -838,12 +802,11 @@ uint8_t IR_Generator::emit_IR_insn_SUB
 {
     /* Place new IR Instruction object in the IR Instructions Arena. */
     size_t offset = IR_instructions_arena->add_entry<ir_insn_sub>
-        (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
+                           (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
 
     /* Add an entry in the IR Instructions Directory. */
     IR_instructions_directory->emplace_back
-        (code_block_ix, statement_ix, ir_instruction_ix,
-         offset, IR_INSN_SUB);
+        (code_block_ix, statement_ix, ir_instruction_ix, offset, IR_INSN_SUB);
 
     return 0;
 }
@@ -855,12 +818,11 @@ uint8_t IR_Generator::emit_IR_insn_MUL
 {
     /* Place new IR Instruction object in the IR Instructions Arena. */
     size_t offset = IR_instructions_arena->add_entry<ir_insn_mul>
-        (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
+                           (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
 
     /* Add an entry in the IR Instructions Directory. */
     IR_instructions_directory->emplace_back
-        (code_block_ix, statement_ix, ir_instruction_ix,
-         offset, IR_INSN_MUL);
+        (code_block_ix, statement_ix, ir_instruction_ix, offset, IR_INSN_MUL);
 
     return 0;
 }
@@ -872,12 +834,11 @@ uint8_t IR_Generator::emit_IR_insn_DIV
 {
     /* Place new IR Instruction object in the IR Instructions Arena. */
     size_t offset = IR_instructions_arena->add_entry<ir_insn_div>
-        (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
+                           (ir_insn_operand1, ir_insn_operand2, ir_insn_target);
 
     /* Add an entry in the IR Instructions Directory. */
     IR_instructions_directory->emplace_back
-        (code_block_ix, statement_ix, ir_instruction_ix,
-         offset, IR_INSN_DIV);
+        (code_block_ix, statement_ix, ir_instruction_ix, offset, IR_INSN_DIV);
 
     return 0;
 }

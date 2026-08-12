@@ -1,7 +1,6 @@
 #define ADD_SYMBOL_IF_ABSENT_AND_GET_PTR(symbols, iter, name, type, val, ptr)  \
     (iter) = (symbols)->find((name));                                          \
-    if( (iter) == (symbols)->end() )                                           \
-    [[unlikely]]                                                               \
+    if( (iter) == (symbols)->end() ) [[unlikely]]                              \
     {                                                                          \
         (iter) =                                                               \
             ((symbols)->emplace((name), Symbol((type), (name), (val)))).first; \
@@ -11,19 +10,16 @@
 #define \
 EMIT_ERR_IF_SYMBOL_ABSENT_OR_GET_PTR(symbols, iter, name, ptr, src_line)       \
     (iter) = (symbols)->find((name));                                          \
-    if( (iter) == (symbols)->end() )                                           \
-    [[unlikely]]                                                               \
+    if( (iter) == (symbols)->end() ) [[unlikely]]                              \
     {                                                                          \
-     std::cout << "Error: Symbol on RHS of assignment not initialized.\n";     \
-     std:: cout << "Line: " << (src_line) << "\n";                             \
-     std::abort();                                                             \
+        std::cout << "Error: Symbol on RHS of assignment not initialized.\n";  \
+        std:: cout << "Line: " << (src_line) << "\n";                          \
+        std::abort();                                                          \
     }                                                                          \
     (ptr) = &((iter)->second);
 
-
 #define VERIFY_N_TOKENS_AFTER_CURSOR_EXIST(tok_arr, cursor, N) \
-    if((tok_arr)->size() - ((cursor) + 1) < (N))               \
-    [[unlikely]]                                               \
+    if((tok_arr)->size() - ((cursor) + 1) < (N)) [[unlikely]]  \
     {                                                          \
         std::cout << "Error: Incomplete program.\n";           \
         std::abort();                                          \
@@ -39,7 +35,6 @@ private:
     size_t symbol_table_size;
 
 public:
-
     /* Receives these from the Lexer. */
     std::vector<Token> token_array;
     Code_Block_Directory code_block_directory;
@@ -70,8 +65,8 @@ public:
     uint8_t spawn_parser(std::vector<size_t> parsing_quota);
 };
 
-class Parser {
-
+class Parser
+{
 public:
     std::unordered_map<std::string, Symbol>* symbol_table;
     Code_Block_Directory* code_block_directory;
@@ -80,30 +75,27 @@ public:
     MEM_Arena* ast_arena;
     Statement_Directory* statement_directory;
 
-    explicit
-    Parser( std::unordered_map<std::string, Symbol>* symbol_table_in,
-            Code_Block_Directory* code_block_dir_in,
-            std::vector<size_t>* code_blocks_to_parse_in,
-            std::vector<Token>* token_array_in,
-            MEM_Arena* ast_arena_in,
-            Statement_Directory* statement_dir_in)
-    : symbol_table(symbol_table_in),
-      code_block_directory(code_block_dir_in),
+    /* Constructor. */
+    explicit Parser
+        (std::unordered_map<std::string, Symbol>* symbol_table_in,
+         Code_Block_Directory* code_block_dir_in,
+         std::vector<size_t>* code_blocks_to_parse_in,
+         std::vector<Token>* token_array_in,
+         MEM_Arena* ast_arena_in, Statement_Directory* statement_dir_in)
+    : symbol_table(symbol_table_in), code_block_directory(code_block_dir_in),
       which_blocks_to_parse(code_blocks_to_parse_in),
-      token_array(token_array_in),
-      ast_arena(ast_arena_in),
-      statement_directory(statement_dir_in)
-    {}
+      token_array(token_array_in), ast_arena(ast_arena_in),
+      statement_directory(statement_dir_in) {}
 
     uint8_t parse_blocks();
 
 private:
     uint8_t parse_statements(size_t* start_token_cursor, size_t block_dir_ix);
 
-    uint8_t parse_statement(size_t* token_cursor, size_t codeblock_dir_ix,
-                            bool*   last_statement_seen,
-                            size_t* statement_wr_offset_after_alignment,
-                            bool*   statement_dir_entry_adding);
+    uint8_t parse_statement
+     (size_t* token_cursor, size_t codeblock_dir_ix, bool* last_statement_seen,
+      size_t* statement_wr_offset_after_alignment,
+      bool* statement_dir_entry_adding);
 
     uint8_t parse_assignment_statement(size_t* token_cursor,
                                        size_t* this_node_wr_offset);
@@ -115,9 +107,9 @@ uint8_t ParsingOrchestrator::spawn_parser(std::vector<size_t> parsing_quota)
 {
     uint8_t ret;
 
-    Parser my_parser = Parser(&symbol_table, &code_block_directory,
-                              &parsing_quota, &token_array,
-                              &ast_arena, &statement_directory);
+    Parser my_parser = Parser
+        (&symbol_table, &code_block_directory, &parsing_quota, &token_array,
+         &ast_arena, &statement_directory);
 
     ret = my_parser.parse_blocks();
 
@@ -161,28 +153,28 @@ uint8_t Parser::parse_bin_op_expr(size_t* token_cursor, size_t* passed_offset)
     else if((*token_array)[cursor + 1].token_type_ix == TOKEN_TYPE_IDENTIFIER)
     {
         EMIT_ERR_IF_SYMBOL_ABSENT_OR_GET_PTR
-                      (symbol_table, symbol_table_iterator,
-                       std::string((*token_array)[cursor + 1].token_value),
-                       symbol_ptr, (*token_array)[cursor + 1].token_line_in_src)
+            (symbol_table, symbol_table_iterator,
+             std::string((*token_array)[cursor + 1].token_value),
+             symbol_ptr, (*token_array)[cursor + 1].token_line_in_src)
 
         saved_ast_node_offset =
                      ast_arena->add_entry<AST_Node_Expr_Identifier>(symbol_ptr);
 
-        lhs_expr_node_ptr = (AST_Node_Expression*)
-                                 (ast_arena->arena_ptr + saved_ast_node_offset);
+        lhs_expr_node_ptr =
+           (AST_Node_Expression*)(ast_arena->arena_ptr + saved_ast_node_offset);
 
         /* Move token cursor past the two we processed, to the BinOp sign. */
         cursor += 2;
     }
     else if
-       ((*token_array)[cursor + 1].token_type_ix == TOKEN_TYPE_NUM_LITERAL_UINT)
+    ((*token_array)[cursor + 1].token_type_ix == TOKEN_TYPE_NUM_LITERAL_UINT)
     {
         saved_ast_node_offset =
           ast_arena->add_entry<AST_Node_Expr_UINT64_Literal>
              (std::stoull(std::string((*token_array)[cursor + 1].token_value)));
 
-        lhs_expr_node_ptr = (AST_Node_Expression*)
-                                 (ast_arena->arena_ptr + saved_ast_node_offset);
+        lhs_expr_node_ptr =
+           (AST_Node_Expression*)(ast_arena->arena_ptr + saved_ast_node_offset);
 
         /* Move token cursor past the two we processed, to the BinOp sign. */
         cursor += 2;
@@ -190,7 +182,9 @@ uint8_t Parser::parse_bin_op_expr(size_t* token_cursor, size_t* passed_offset)
 
     /* PART II. */
     /* Extract the sign of this BinOp. */
+
     VERIFY_N_TOKENS_AFTER_CURSOR_EXIST(token_array, cursor, 1)
+
     if((*token_array)[cursor].token_type_ix != TOKEN_TYPE_OPERATOR)
     {
         std::cout<< "\nSyntax error: Sign of binary operation is invalid.\n"
@@ -212,21 +206,21 @@ uint8_t Parser::parse_bin_op_expr(size_t* token_cursor, size_t* passed_offset)
         ret = parse_bin_op_expr(&cursor, &saved_ast_node_offset);
         if(ret) [[unlikely]] { return 1; }
 
-        rhs_expr_node_ptr = (AST_Node_Expression*)
-                                 (ast_arena->arena_ptr + saved_ast_node_offset);
+        rhs_expr_node_ptr =
+           (AST_Node_Expression*)(ast_arena->arena_ptr + saved_ast_node_offset);
     }
     else if((*token_array)[cursor].token_type_ix == TOKEN_TYPE_IDENTIFIER)
     {
         EMIT_ERR_IF_SYMBOL_ABSENT_OR_GET_PTR
-                       (symbol_table, symbol_table_iterator,
-                       std::string((*token_array)[cursor].token_value),
-                       symbol_ptr, (*token_array)[cursor + 1].token_line_in_src)
+            (symbol_table, symbol_table_iterator,
+             std::string((*token_array)[cursor].token_value),
+             symbol_ptr, (*token_array)[cursor + 1].token_line_in_src)
 
         saved_ast_node_offset =
                      ast_arena->add_entry<AST_Node_Expr_Identifier>(symbol_ptr);
 
-        rhs_expr_node_ptr = (AST_Node_Expression*)
-                                 (ast_arena->arena_ptr + saved_ast_node_offset);
+        rhs_expr_node_ptr =
+           (AST_Node_Expression*)(ast_arena->arena_ptr + saved_ast_node_offset);
 
         /* Move token cursor past the token we processed, to the close paren. */
         cursor += 1;
@@ -237,8 +231,8 @@ uint8_t Parser::parse_bin_op_expr(size_t* token_cursor, size_t* passed_offset)
           ast_arena->add_entry<AST_Node_Expr_UINT64_Literal>
              (std::stoull(std::string((*token_array)[cursor].token_value)));
 
-        rhs_expr_node_ptr = (AST_Node_Expression*)
-                                 (ast_arena->arena_ptr + saved_ast_node_offset);
+        rhs_expr_node_ptr =
+           (AST_Node_Expression*)(ast_arena->arena_ptr + saved_ast_node_offset);
 
         /* Move token cursor past the token we processed, to the close paren. */
         cursor += 1;
@@ -258,8 +252,8 @@ uint8_t Parser::parse_bin_op_expr(size_t* token_cursor, size_t* passed_offset)
     /* At the end of this, set the offset we were passed to be the offset of
      * this BinOp's AST Node itself, so the caller can set a pointer to it.
      */
-    *passed_offset = ast_arena->add_entry
-      <AST_Node_Expr_BinOp>(lhs_expr_node_ptr, rhs_expr_node_ptr, bin_operator);
+    *passed_offset = ast_arena->add_entry<AST_Node_Expr_BinOp>
+                           (lhs_expr_node_ptr, rhs_expr_node_ptr, bin_operator);
 
     *token_cursor = cursor;
     return 0;
@@ -297,8 +291,8 @@ uint8_t Parser::parse_assignment_statement(size_t* token_cursor,
           ast_arena->add_entry<AST_Node_Expr_UINT64_Literal>
              (std::stoull(std::string((*token_array)[cursor + 2].token_value)));
 
-        rhs_expr_node_ptr = (AST_Node_Expression*)
-                                 (ast_arena->arena_ptr + saved_ast_node_offset);
+        rhs_expr_node_ptr =
+           (AST_Node_Expression*)(ast_arena->arena_ptr + saved_ast_node_offset);
 
         /* Move token cursor past the three we just processed. */
         cursor += 3;
@@ -314,8 +308,8 @@ uint8_t Parser::parse_assignment_statement(size_t* token_cursor,
        saved_ast_node_offset =
                      ast_arena->add_entry<AST_Node_Expr_Identifier>(symbol_ptr);
 
-        rhs_expr_node_ptr = (AST_Node_Expression*)
-                                 (ast_arena->arena_ptr + saved_ast_node_offset);
+        rhs_expr_node_ptr =
+           (AST_Node_Expression*)(ast_arena->arena_ptr + saved_ast_node_offset);
 
         /* Move token cursor past the three we processed. */
         cursor += 3;
@@ -355,12 +349,12 @@ uint8_t Parser::parse_assignment_statement(size_t* token_cursor,
      * Where this is the first assignment to x.
      */
     ADD_SYMBOL_IF_ABSENT_AND_GET_PTR
-                    (symbol_table, symbol_table_iterator,
-                     std::string((*token_array)[lhs_symbol_cursor].token_value),
-                     SYMBOL_KIND_UINT64, 0, lhs_symbol_ptr)
+        (symbol_table, symbol_table_iterator,
+         std::string((*token_array)[lhs_symbol_cursor].token_value),
+         SYMBOL_KIND_UINT64, 0, lhs_symbol_ptr)
 
-    *this_node_wr_offset = ast_arena->add_entry
-             <AST_Node_Statement_Assignment>(lhs_symbol_ptr, rhs_expr_node_ptr);
+    *this_node_wr_offset = ast_arena->add_entry<AST_Node_Statement_Assignment>
+                                      (lhs_symbol_ptr, rhs_expr_node_ptr);
 
     /* Update the Token cursor for upstream calls. */
     *token_cursor = cursor;
@@ -380,12 +374,12 @@ uint8_t Parser::parse_assignment_statement(size_t* token_cursor,
  * in the written source code, containing indices to each statement's AST Node
  * in the AST Arena, thereby completing the full AST.
  */
-uint8_t Parser::parse_statement(size_t* token_cursor, size_t codeblock_dir_ix,
-                                bool*   last_statement_seen,
-                                size_t* statement_wr_offset_after_alignment,
-                                bool*   statement_dir_entry_adding)
+uint8_t Parser::parse_statement
+ (size_t* token_cursor, size_t codeblock_dir_ix, bool* last_statement_seen,
+  size_t* statement_wr_offset_after_alignment, bool* statement_dir_entry_adding)
 {
     size_t cursor = *token_cursor;
+    size_t token_type;
     *statement_dir_entry_adding = false;
 
     /* The grammar is simple enough that the first token of the statement
@@ -451,21 +445,22 @@ uint8_t Parser::parse_statement(size_t* token_cursor, size_t codeblock_dir_ix,
          * If the token array ends before that, the program is incomplete.
          */
         VERIFY_N_TOKENS_AFTER_CURSOR_EXIST(token_array, cursor, 4)
+
         /* Check for the equals sign. */
-        if((*token_array)[cursor + 1].token_value != "=")
-        [[unlikely]]
+        if((*token_array)[cursor + 1].token_value != "=") [[unlikely]]
         {
             std::cout << "\n\n"
-                      << "Syntax error: Assignment started but no '=' found.\n"
-                      << "Line: " << (*token_array)[cursor + 1].token_line_in_src
-                      << "\n\n";
+                      << "Syntax error: No '=' found in assignment.\nLine: "
+                      << (*token_array)[cursor + 1].token_line_in_src << "\n\n";
             std::abort();
         }
+
+        token_type = (*token_array)[cursor + 2].token_type_ix;
+
         /* Check for what comes after the equals sign. */
-        if(  (*token_array)[cursor + 2].token_type_ix != TOKEN_TYPE_IDENTIFIER
-          && (*token_array)[cursor + 2].token_type_ix != TOKEN_TYPE_NUM_LITERAL_UINT
-          && (*token_array)[cursor + 2].token_type_ix != TOKEN_TYPE_OPEN_PAREN)
-        [[unlikely]]
+        if(   token_type != TOKEN_TYPE_IDENTIFIER
+           && token_type != TOKEN_TYPE_NUM_LITERAL_UINT
+           && token_type != TOKEN_TYPE_OPEN_PAREN) [[unlikely]]
         {
             std::cout
                  << "\n\n"
@@ -486,6 +481,7 @@ uint8_t Parser::parse_statement(size_t* token_cursor, size_t codeblock_dir_ix,
         break;
     }
     } /* outer switch end. */
+
     *token_cursor = cursor;
     return 0;
 }
@@ -501,17 +497,15 @@ uint8_t Parser::parse_statements(size_t* start_token_cursor,
 
     while(last_statement_seen == false)
     {
-        ret = parse_statement(start_token_cursor, block_dir_ix,
-                              &last_statement_seen,
-                              &arena_offset_to_statement,
-                              &statement_dir_entry_adding);
-
+        ret = parse_statement
+               (start_token_cursor, block_dir_ix, &last_statement_seen,
+                &arena_offset_to_statement, &statement_dir_entry_adding);
         if(ret) [[unlikely]] { return 1; }
 
         if(statement_dir_entry_adding)
         {
-            (*statement_directory).emplace_back
-              (block_dir_ix, statement_ix, arena_offset_to_statement);
+            (*statement_directory).emplace_back(block_dir_ix, statement_ix,
+                                                arena_offset_to_statement);
             ++statement_ix;
         }
     }
@@ -521,12 +515,12 @@ uint8_t Parser::parse_statements(size_t* start_token_cursor,
 uint8_t Parser::parse_blocks()
 {
     uint8_t ret;
-    size_t start_cursor;
+    size_t  start_cursor;
 
     for(size_t i = 0; i < which_blocks_to_parse->size(); ++i)
     {
-        start_cursor = (*code_block_directory)
-                        [(*which_blocks_to_parse)[i]].start_token_index;
+        start_cursor =
+         (*code_block_directory)[(*which_blocks_to_parse)[i]].start_token_index;
 
         ret = parse_statements(&start_cursor, (*which_blocks_to_parse)[i]);
 

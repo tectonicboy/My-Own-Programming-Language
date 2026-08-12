@@ -96,6 +96,7 @@ public:
     {
         return code_block_dir_vec[entry_ix];
     }
+
     /* Emplace an entry at the back. */
     inline void
     emplace_back(const size_t start_token_ix, const size_t end_token_ix,
@@ -105,6 +106,7 @@ public:
             (start_token_ix, end_token_ix, code_block_type_ix));
         return;
     }
+
     inline size_t size(void) const
     {
         return code_block_dir_vec.size();
@@ -211,6 +213,7 @@ public:
                                        root_ast_node_arena_offset_in);
         return;
     }
+
     inline size_t size() const
     {
         return statement_dir_vec.size();
@@ -247,9 +250,9 @@ lookuptable_ir_insn_types =
  * Each Code Block has one or more source statements. Each source statement
  * gets one or more emitted IR instructions that implement it in SSA IR code.
  */
-class IR_Instructions_Directory_Entry {
+class IR_Instructions_Directory_Entry
+{
 public:
-
     size_t code_block_ix;
     size_t statement_ix;
     size_t ir_insn_ix;
@@ -258,9 +261,9 @@ public:
 
     /* Constructor */
     explicit IR_Instructions_Directory_Entry
-    (size_t code_block_ix_in, size_t statement_ix_in,
-     size_t ir_insn_ix_in,    size_t ir_insn_arena_offset_in,
-     size_t which_ir_insn_in)
+        (size_t code_block_ix_in, size_t statement_ix_in,
+         size_t ir_insn_ix_in,    size_t ir_insn_arena_offset_in,
+         size_t which_ir_insn_in)
     : code_block_ix(code_block_ix_in), statement_ix(statement_ix_in),
       ir_insn_ix(ir_insn_ix_in), ir_insn_arena_offset(ir_insn_arena_offset_in),
       which_ir_instruction(which_ir_insn_in)
@@ -278,10 +281,10 @@ public:
     }
 };
 
-class IR_Instructions_Directory {
+class IR_Instructions_Directory
+{
 private:
-    constexpr static
-    size_t IR_instructions_dir_default_initial_capacity = 10'000;
+    constexpr static size_t IR_instructions_dir_default_init_capacity = 10'000;
     size_t initial_capacity;
     std::vector<IR_Instructions_Directory_Entry> IR_instructions_dir_vec;
 
@@ -300,7 +303,7 @@ public:
     IR_Instructions_Directory(size_t init_capa_in, bool prefill_default_slots)
     {
         if( ! init_capa_in )
-            initial_capacity = IR_instructions_dir_default_initial_capacity;
+            initial_capacity = IR_instructions_dir_default_init_capacity;
         else
             initial_capacity = init_capa_in;
 
@@ -347,6 +350,7 @@ public:
              ir_insn_arena_offset_in, which_ir_insn_in);
         return;
     }
+
     inline size_t size() const
     {
         return IR_instructions_dir_vec.size();
