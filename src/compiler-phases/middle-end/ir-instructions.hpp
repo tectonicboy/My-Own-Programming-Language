@@ -2,7 +2,6 @@
 class ir_insn_equate
 {
 public:
-
     std::string lhs;
     std::string rhs;
 
@@ -20,7 +19,6 @@ public:
 
 class ir_insn_add
 {
-
 public:
     std::string lhs_operand;
     std::string rhs_operand;
@@ -43,7 +41,6 @@ public:
 
 class ir_insn_sub
 {
-
 public:
     std::string lhs_operand;
     std::string rhs_operand;
@@ -66,7 +63,6 @@ public:
 
 class ir_insn_mul
 {
-
 public:
     std::string lhs_operand;
     std::string rhs_operand;
@@ -89,7 +85,6 @@ public:
 
 class ir_insn_div
 {
-
 public:
     std::string lhs_operand;
     std::string rhs_operand;

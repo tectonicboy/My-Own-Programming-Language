@@ -16,24 +16,24 @@ std::array<const char*, total_code_block_types> code_block_type_strings =
 class Code_Block_Directory_Entry
 {
 public:
-    size_t start_token_index;
-    size_t end_token_index;
-    size_t code_block_type_index;
+    size_t start_token_ix;
+    size_t end_token_ix;
+    size_t code_block_type_ix;
 
     /* Constructor. */
     explicit
     Code_Block_Directory_Entry(size_t start_ix, size_t end_ix, size_t type_ix)
-    : start_token_index(start_ix), end_token_index(end_ix),
-      code_block_type_index(type_ix) {}
+    : start_token_ix(start_ix), end_token_ix(end_ix),
+    code_block_type_ix(type_ix) {}
 
     /* Pretty printer. */
     void print_code_block_info(void) const
     {
         std::cout << "\n--------------------------------------------------"
                   << "\nCode Block Type: "
-                  << code_block_type_strings[code_block_type_index]
-                  << "\nStart Token Index: " << start_token_index
-                  << "\nEnd   Token Index: " << end_token_index
+                  << code_block_type_strings[code_block_type_ix]
+                  << "\nStart Token Index: " << start_token_ix
+                  << "\nEnd   Token Index: " << end_token_ix
                   << "\n--------------------------------------------------\n";
     }
 };
@@ -41,7 +41,7 @@ public:
 /* The Code Block Directory.
  *
  * Used exclusively in the compiler frontend. Spawned into existence by a Lexer,
- * then given to a Parser using move semantics via the custom move constructor.
+ * then given to a Parsing Orchestrator via the custom move constructor.
  */
 class Code_Block_Directory
 {
@@ -49,6 +49,7 @@ private:
     constexpr static size_t code_block_dir_default_initial_capacity = 100;
     size_t initial_capacity;
     std::vector<Code_Block_Directory_Entry> code_block_dir_vec;
+
 public:
     /* Regular constructor.
      *
@@ -266,8 +267,7 @@ public:
          size_t which_ir_insn_in)
     : code_block_ix(code_block_ix_in), statement_ix(statement_ix_in),
       ir_insn_ix(ir_insn_ix_in), ir_insn_arena_offset(ir_insn_arena_offset_in),
-      which_ir_instruction(which_ir_insn_in)
-    {}
+      which_ir_instruction(which_ir_insn_in) {}
 
     void print_entry(void)
     {
@@ -317,8 +317,7 @@ public:
     /* Move constructor.
      *
      * Used when passing ownership of the IR Instructions Directory from the
-     * Parsing Orchestrator to the IR Generation Orchestrator, avoiding
-     * wasteful copies.
+     * Parsing Orchestrator to the IR Generation Orchestrator.
      */
     IR_Instructions_Directory(IR_Instructions_Directory&& old_dir)
     : initial_capacity(old_dir.initial_capacity),

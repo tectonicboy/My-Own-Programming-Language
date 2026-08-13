@@ -2,7 +2,7 @@
  * one place, contiguously, to boost spatial cache locality. Examples used for
  * the compiler's own C++ source code include the IR Instructions Arena, which
  * contains individual emitted IR Instructions, and the AST Arena, which holds
- * the entire generated AST for a given source program.
+ * the entire generated AST, with contiguous nodes, for a given source program.
  *
  * The add_entry() member function uses a template type T for the type of
  * object that is to be added, as well as a template parameter pack Args...
@@ -12,8 +12,7 @@
  * in place into its slot in the memory arena using C++ placement new.
  *
  * In all use cases, a special bookkeeping data structure contains the byte
- * offset of elements present in the arena. Sometimes for each arena entry,
- * sometimes not, as explained below.
+ * offset of elements present in the arena.
  *
  * For instance, in the IR Instructions Arena, the byte offset of each
  * IR Instruction object present in it is contained in a data structure called
@@ -21,12 +20,7 @@
  * source code Statement index which the given IR Instruction was emitted for,
  * the byte offset of this IR Instruction into the memory arena and other
  * compiler bookkeeping.
- *
- * For the AST Arena, the byte offset of each source statement's root AST Node
- * is kept in the Statement Directory, as the tree data structure ensures that
- * these root AST Nodes point to the rest of each source statement's AST Nodes.
  */
-
 class MEM_Arena
 {
 private:

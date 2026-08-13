@@ -157,8 +157,9 @@ std::string first_program =
 
     std::cout << "Printing collected Code Blocks:\n";
 
-    for(size_t i = 0; i < lexer1.code_block_directory.size(); ++i){
-        lexer1.code_block_directory[i].print_code_block_info();
+    for(size_t i = 0; i < lexer1.code_block_dir.size(); ++i)
+    {
+        lexer1.code_block_dir[i].print_code_block_info();
     }
 
     std::cout << "Time taken LEXER: "
@@ -181,7 +182,7 @@ std::string first_program =
     std::vector<std::vector<size_t>> parsing_quotas = {{0}};
 
     ParsingOrchestrator my_parsing_orchestrator
-        (std::move(lexer1.code_block_directory),
+        (std::move(lexer1.code_block_dir),
          std::move(lexer1.token_array),
          std::move(parsing_quotas));
 
@@ -199,13 +200,13 @@ std::string first_program =
 
     std::cout << "Reconstructing the source program from the AST:\n";
 
-    size_t entries = my_parsing_orchestrator.statement_directory.size();
+    size_t entries = my_parsing_orchestrator.statement_dir.size();
     size_t arena_offset;
     AST_Node_Statement_Assignment* stmt_ast_node = nullptr;
 
     for(size_t i = 0; i < entries; ++i)
     {
-        arena_offset = my_parsing_orchestrator.statement_directory[i]
+        arena_offset = my_parsing_orchestrator.statement_dir[i]
                         .root_ast_node_arena_offset;
 
         stmt_ast_node = (AST_Node_Statement_Assignment*)
@@ -219,13 +220,13 @@ std::string first_program =
     IR_Generation_Orchestrator my_ir_generation_orchestrator
         (std::move(my_parsing_orchestrator.symbol_table),
          std::move(my_parsing_orchestrator.ast_arena),
-         std::move(my_parsing_orchestrator.statement_directory),
+         std::move(my_parsing_orchestrator.statement_dir),
          std::move(parsing_quotas));
 
     my_ir_generation_orchestrator.spawn_IR_generator
         (my_ir_generation_orchestrator.IR_generation_quotas[0]);
 
-    entries = my_ir_generation_orchestrator.IR_instructions_directory.size();
+    entries = my_ir_generation_orchestrator.IR_instructions_dir.size();
     IR_Instructions_Directory_Entry* entry;
     size_t which_ir_insn;
     uint8_t* arena =
@@ -238,7 +239,7 @@ std::string first_program =
 
     for(size_t i = 0; i < entries; ++i)
     {
-        entry = &(my_ir_generation_orchestrator.IR_instructions_directory[i]);
+        entry = &(my_ir_generation_orchestrator.IR_instructions_dir[i]);
         arena_offset = entry->ir_insn_arena_offset;
         which_ir_insn = entry->which_ir_instruction;
         if(which_ir_insn == IR_INSN_EQUATE)

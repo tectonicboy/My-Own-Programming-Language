@@ -6,17 +6,14 @@
  * Token type can be readily deduced from the first character of the lexeme.
  * All whitespace is ignored. No semantic analysis is performed during lexing.
  * Minimal syntax errors are caught like unrecognized tokens and improper
- * containment of statements inside Code Blocks.
+ * containment of source statements inside Code Blocks.
  *
  * The Lexer does not need to check for Code Block types, it just needs to check
- * for complete code blocks, with START_BLOCK and END_BLOCK, that's all. The
- * Semantic Analyzer will check Code Block types using the Parser-emitted AST.
+ * for complete code blocks, with START_BLOCK and END_BLOCK, that's all.
  */
 class Lexer
 {
 private:
-
-    /* Spawns into existence these new things. For its own internal use. */
     uint64_t current_lexeme_len;
     uint64_t current_token_type_ix;
     uint64_t current_line_ix;
@@ -31,28 +28,25 @@ private:
     const size_t      source_code_len;
 
 public:
-
     /* Spawns into existence these new things. */
     /* Transfers them to the Parsing Orchestrator after lexing. */
     std::vector<Token> token_array;
-    Code_Block_Directory code_block_directory;
+    Code_Block_Directory code_block_dir;
 
     /* Constructor. */
     explicit Lexer(const std::string&& source_code_in)
     : current_line_ix(1), current_col_ix(1), inside_code_block(false),
       source_code(std::move(source_code_in)),
       source_code_len(source_code.length()),
-      code_block_directory(Code_Block_Directory(0, 0))
+      code_block_dir(Code_Block_Directory(0, 0))
     {
-        /* Reserve initial space in the std::vector for 10 thousand tokens. */
-        /* This avoids excessive hidden heap allocations by the vector.     */
+        /* This avoids excessive hidden vector heap allocations at runtime. */
         token_array.reserve(10'000);
     }
 
     void Tokenize_Source_Code(void);
 
 private:
-
     /* Functions describing how to process each Token type.                  */
     /* Note the Lexer keeps track of which line and column each token is at. */
 
@@ -233,7 +227,7 @@ inline void Lexer::lex_identifier_and_keyword(void)
                     std::abort();
                 }
                 inside_code_block = true;
-                code_block_directory.emplace_back(token_array.size(), 0, 0);
+                code_block_dir.emplace_back(token_array.size(), 0, 0);
             }
             else if(k == KEYWORD_BLOCK_END)
             {
@@ -248,8 +242,8 @@ inline void Lexer::lex_identifier_and_keyword(void)
                 }
                 inside_code_block = false;
 
-                code_block_directory[code_block_directory.size() - 1]
-                    .end_token_index = token_array.size();
+                code_block_dir[code_block_dir.size() - 1]
+                    .end_token_ix = token_array.size();
             }
             token_array.emplace_back
                 (std::string_view(temp_identifier_view), current_line_ix,
@@ -307,9 +301,6 @@ void Lexer::Tokenize_Source_Code(void)
             }
 
         }
-
-        /* All these helper function calls are always inlined. */
-
         if (source_code[cursor] == ' ' || source_code[cursor] == '\t')
             lex_whitespace();
 
@@ -345,8 +336,7 @@ void Lexer::Tokenize_Source_Code(void)
      * If it's not seen for a non-last Code Block, this gets caught by the
      * code for seeing the BLOCK_START keyword.
      */
-    if
-    (code_block_directory[code_block_directory.size() - 1].end_token_index == 0)
+    if(code_block_dir[code_block_dir.size() - 1].end_token_ix == 0)
     {
         std::cout
              << "\n\nSyntax Error: End of program reached and last Code Block\n"

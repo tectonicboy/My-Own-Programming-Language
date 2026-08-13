@@ -37,7 +37,7 @@ private:
 public:
     /* Receives these from the Lexer. */
     std::vector<Token> token_array;
-    Code_Block_Directory code_block_directory;
+    Code_Block_Directory code_block_dir;
 
     /* Receives this from the top-level compilation driver. */
     std::vector<std::vector<size_t>> parsing_quotas;
@@ -45,7 +45,7 @@ public:
     /* Brings into existence these new things. */
     std::unordered_map<std::string, Symbol> symbol_table;
     MEM_Arena ast_arena;
-    Statement_Directory statement_directory;
+    Statement_Directory statement_dir;
 
     /* Constructor. */
     explicit ParsingOrchestrator
@@ -54,10 +54,10 @@ public:
          std::vector<std::vector<size_t>>&& parser_quotas_in)
     : symbol_table_size(10'000),
       token_array(std::move(token_array_in)),
-      code_block_directory(std::move(code_block_dir_in)),
+      code_block_dir(std::move(code_block_dir_in)),
       parsing_quotas(std::move(parser_quotas_in)),
       ast_arena(MEM_Arena(std::string("AST Arena"))),
-      statement_directory(Statement_Directory(0, false))
+      statement_dir(Statement_Directory(0, false))
     {
         symbol_table.reserve(symbol_table_size);
     }
@@ -69,11 +69,11 @@ class Parser
 {
 public:
     std::unordered_map<std::string, Symbol>* symbol_table;
-    Code_Block_Directory* code_block_directory;
+    Code_Block_Directory* code_block_dir;
     std::vector<size_t>* which_blocks_to_parse;
     std::vector<Token>* token_array;
     MEM_Arena* ast_arena;
-    Statement_Directory* statement_directory;
+    Statement_Directory* statement_dir;
 
     /* Constructor. */
     explicit Parser
@@ -82,10 +82,10 @@ public:
          std::vector<size_t>* code_blocks_to_parse_in,
          std::vector<Token>* token_array_in,
          MEM_Arena* ast_arena_in, Statement_Directory* statement_dir_in)
-    : symbol_table(symbol_table_in), code_block_directory(code_block_dir_in),
+    : symbol_table(symbol_table_in), code_block_dir(code_block_dir_in),
       which_blocks_to_parse(code_blocks_to_parse_in),
       token_array(token_array_in), ast_arena(ast_arena_in),
-      statement_directory(statement_dir_in) {}
+      statement_dir(statement_dir_in) {}
 
     uint8_t parse_blocks();
 
@@ -108,8 +108,8 @@ uint8_t ParsingOrchestrator::spawn_parser(std::vector<size_t> parsing_quota)
     uint8_t ret;
 
     Parser my_parser = Parser
-        (&symbol_table, &code_block_directory, &parsing_quota, &token_array,
-         &ast_arena, &statement_directory);
+        (&symbol_table, &code_block_dir, &parsing_quota, &token_array,
+         &ast_arena, &statement_dir);
 
     ret = my_parser.parse_blocks();
 
@@ -123,7 +123,7 @@ uint8_t ParsingOrchestrator::spawn_parser(std::vector<size_t> parsing_quota)
 
     std::cout << "AST mem arena used bytes  : " << ast_arena.wr_offset << "\n";
     std::cout << "Statement dir used entries: "
-              << statement_directory.size() << "\n\n";
+              << statement_dir.size() << "\n\n";
     return 0;
 }
 
@@ -365,14 +365,14 @@ uint8_t Parser::parse_assignment_statement(size_t* token_cursor,
  *
  * This is the only function called by Parsers, which are spawned by a single
  * Parsing Orchestrator, whose job is to maintain the cache locality-friendly
- * memory arena used to store all Nodes of the constructed AST, along with any
- * necessary bookkeeping information.
+ * memory arena used to contiguously store all Nodes of the constructed AST,
+ * along with any necessary bookkeeping information.
  *
- * The Parsing Orchestrator generates the AST of a correctly written program. It
- * also generates the Symbol Table for the program and the Statement Directory
- * serving as a contiguous array containing the root AST Node of each Code Block
- * in the written source code, containing indices to each statement's AST Node
- * in the AST Arena, thereby completing the full AST.
+ * The grammar is simple enough that the first token of the statement
+ * reveals exactly what type of statement it is, depending on the Token type
+ * so we can call the respective Statement Processor Function here. For
+ * statements that don't add an AST Node, we parse them here without having
+ * a special processor function for them, for example BLOCK_START.
  */
 uint8_t Parser::parse_statement
  (size_t* token_cursor, size_t codeblock_dir_ix, bool* last_statement_seen,
@@ -381,13 +381,6 @@ uint8_t Parser::parse_statement
     size_t cursor = *token_cursor;
     size_t token_type;
     *statement_dir_entry_adding = false;
-
-    /* The grammar is simple enough that the first token of the statement
-     * reveals exactly what type of statement it is, depending on the Token type
-     * so we can call the respective Statement Processor Function here. For
-     * statements that don't add an AST Node, we parse them here without having
-     * a special processor function for them, for example BLOCK_START.
-     */
 
     /* Which token type? */
     switch((*token_array)[cursor].token_type_ix)
@@ -399,12 +392,13 @@ uint8_t Parser::parse_statement
                 == reserved_keyword_strings[KEYWORD_BLOCK_START] )
         {
             ++cursor;
+
             /* Which code block type are we starting? */
             if( (*token_array)[cursor].token_value
                     == reserved_keyword_strings[KEYWORD_PROGRAM] )
             {
-                (*code_block_directory)[codeblock_dir_ix]
-                    .code_block_type_index = CODE_BLOCK_TYPE_PROGRAM;
+                (*code_block_dir)[codeblock_dir_ix].code_block_type_ix
+                                                    = CODE_BLOCK_TYPE_PROGRAM;
                 ++cursor;
             }
             else
@@ -438,10 +432,10 @@ uint8_t Parser::parse_statement
     /* This starts an assignment statement. */
     case TOKEN_TYPE_IDENTIFIER:
     {
-        /* Quick syntax checks then call the processor function. */
+        /* Quick syntax checks, then call the processor function. */
 
         /* At least 4 more tokens are needed for a minimal assignment:
-         * identifier = identifier ; BLOCK_END
+         * identifier = identifier;
          * If the token array ends before that, the program is incomplete.
          */
         VERIFY_N_TOKENS_AFTER_CURSOR_EXIST(token_array, cursor, 4)
@@ -473,7 +467,7 @@ uint8_t Parser::parse_statement
             std::abort();
         }
 
-        /* Start of assignment statement looks good. Parse it. */
+        /* Initial part of the assignment statement looks good. Parse it. */
         parse_assignment_statement
             (&cursor, statement_wr_offset_after_alignment);
 
@@ -504,7 +498,7 @@ uint8_t Parser::parse_statements(size_t* start_token_cursor,
 
         if(statement_dir_entry_adding)
         {
-            (*statement_directory).emplace_back(block_dir_ix, statement_ix,
+            (*statement_dir).emplace_back(block_dir_ix, statement_ix,
                                                 arena_offset_to_statement);
             ++statement_ix;
         }
@@ -520,7 +514,7 @@ uint8_t Parser::parse_blocks()
     for(size_t i = 0; i < which_blocks_to_parse->size(); ++i)
     {
         start_cursor =
-         (*code_block_directory)[(*which_blocks_to_parse)[i]].start_token_index;
+         (*code_block_dir)[(*which_blocks_to_parse)[i]].start_token_ix;
 
         ret = parse_statements(&start_cursor, (*which_blocks_to_parse)[i]);
 

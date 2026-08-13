@@ -60,14 +60,12 @@ Current planned efforts, in order:
       Make all ownership of large data structures be transferred via move
       semantics. So far, at these borders: Lexing -> Parsing -> IR Generation.
 
-  [COMPLETED
+  [COMPLETED]
   1.3. Establish a clean coding style, apply it to all existing project code.
 
-  [WORK IN PROGRESS]
+  [COMPLETED: A further 130 lines of code eliminated.]
   1.4. Reduce total lines of code as much as possible.
 
-       - Get rid of mostly empty lines of code, e.g. call site argument passing.
-       - Get rid of empty lines between function definitions.
        - Get rid of unnecessary default destructor definitions.
        - Get rid of unnecessary comments.
 
@@ -93,9 +91,11 @@ Current planned efforts, in order:
         - Where possible, put [[(un)likely]] blocks on same line as IF condition
         -
 
+  [COMPLETED]
   1.5. Comments may need to be added, adjusted or reduced in some places.
        Go over the whole existing codebase and make sure all comments are OK.
 
+[WORK IN PROGRESS]
 2. Come up with and implement a proper compiler driving program and stages.
    Source code should come from files. Compiler phases should be separately
    spawned OS processes on intermediate files or interprocess communications.

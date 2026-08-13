@@ -55,9 +55,9 @@ public:
 
     /* Constructor. */
     explicit Token(std::string_view value_text, uint64_t line_in_src,
-                   uint32_t col_in_src, uint32_t type_index)
+                   uint32_t col_in_src, uint32_t type_ix)
     : token_value(value_text), token_line_in_src(line_in_src),
-      token_col_in_src(col_in_src), token_type_ix(type_index) {}
+      token_col_in_src(col_in_src), token_type_ix(type_ix) {}
 
     void Print_Token_Info(void) const
     {
