@@ -1,6 +1,44 @@
 ================================================================================
 #####----------------------------------------------------------------------#####
-#       30 July 2026 - Creating the To Do list, adding initial content.        #
+#       14 August 2026 - Agenda: Documentation, ASM code generation phase.     #
+#####----------------------------------------------------------------------#####
+================================================================================
+
+Current planned eforts, in order:
+
+1. Review and update project documentation.
+
+    1.1. Go through current documentation, make sure nothing needs changing
+         after the large elegance boosting refactoring effort.
+
+    1.2. Write new documentation for the SSA IR generation phase.
+
+    1.3. Write new documentation for calling the compiler on the command line.
+
+
+2. Come up with an initial design for how to emit assembly code from SSA IR.
+
+   Design questions: - How to represent assembly instructions from different
+                       architectures. How to use OOP elegantly here. Perhaps
+                       there's a class for instructions that perform ADD, one
+                       for MUL instructions. Or perhaps there's a class for
+                       instructions with 0 operands, 1, 2 operands, etc.
+
+                       Think about how to elegantly design this part.
+
+                     - How to map each Hirola language construct to a set of
+                       known assembly instructions in a given architecture.
+                       Like, an ADD IR instruction maps to ADD assembly code.
+                       A loop maps to a cmp/test and a jne/je for example.
+
+                     - When, how and where should register allocation be
+                       performed even if not yet implemented in this effort now.
+
+                     - How to go from assembly code to an ELF binary.
+
+================================================================================
+#####----------------------------------------------------------------------#####
+#       30 July 2026 - Agenda: Creating the ToDo list, add initial content.    #
 #####----------------------------------------------------------------------#####
 ================================================================================
 
@@ -61,7 +99,7 @@ Current planned efforts, in order:
       semantics. So far, at these borders: Lexing -> Parsing -> IR Generation.
 
   [COMPLETED]
-  1.3. Establish a clean coding style, apply it to all existing project code.
+  1.3. Establish a clean coding style, apply to all 3000 lines of existing code.
 
   [COMPLETED: A further 130 lines of code eliminated.]
   1.4. Reduce total lines of code as much as possible.
@@ -95,6 +133,6 @@ Current planned efforts, in order:
   1.5. Comments may need to be added, adjusted or reduced in some places.
        Go over the whole existing codebase and make sure all comments are OK.
 
-[WORK IN PROGRESS]
+[COMPLETED]
 2. Come up with and implement a proper compiler driving program and stages.
    Source code should come from files.
