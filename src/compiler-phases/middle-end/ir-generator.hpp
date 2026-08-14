@@ -131,15 +131,12 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
         (std::vector<size_t> selected_IR_generation_quota)
 {
     uint8_t ret = 0;
-
     IR_Generator my_IR_generator
        (&(this->symbol_table), &(this->ast_arena), &(this->statement_dir),
         &(this->IR_instructions_arena), &(this->IR_instructions_dir),
         selected_IR_generation_quota);
-
     ret = my_IR_generator.emit_IR();
     if(ret) [[unlikely]] { return ret; }
-
     std::cout << "\n  ****  IR generation successful!  ****\n\n";
     std::cout << "IR Instructions emitted: "
               << IR_instructions_dir.size() << "\n";
