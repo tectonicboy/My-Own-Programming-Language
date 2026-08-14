@@ -1,0 +1,12 @@
+BLOCK_START PROGRAM
+a = 5;
+b = 0;
+c = 9444;
+c = a;
+a = 7;
+b = a;
+d = c;
+c = (a + 5);
+a = (a + b);
+a = (( (10 + d) / (a * c) ) + (a - 77));
+BLOCK_END

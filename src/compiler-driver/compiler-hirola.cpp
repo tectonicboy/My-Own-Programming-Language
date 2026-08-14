@@ -27,120 +27,72 @@
 #include "../compiler-phases/middle-end/ir-instructions.hpp"
 #include "../compiler-phases/middle-end/ir-generator.hpp"
 
-int main()
+void grab_source_code_string(char* source_file_name, std::string& target_str)
 {
-    struct timespec tv1, tv2;
+    size_t      bytes_read;
+    size_t      file_size;
+    uint8_t*    source_code_buf;
+    FILE*       hirola_program_fd;
 
-    std::string first_program =
-    "BLOCK_START PROGRAM\n"
-    "a = 5;\n"
-    "b = 0;\n"
-    "c = 9444;\n"
-    "c = a;\n"
-    "a = 7;\n"
-    "b = a;\n"
-    "d = c;\n"
-    "c = (a + 5);\n"
-    "a = (a + b);\n"
-    "a = (( (10 + d) / (a * c) ) + (a - 77));\n"
-    "BLOCK_END";
+    if( ! (hirola_program_fd = fopen(source_file_name, "r")) ) [[unlikely]]
+    {
+        perror("Could not open Hirola source code file: ");
+        std::abort();
+    }
+    if( fseek(hirola_program_fd, 0, SEEK_END) == -1 ) [[unlikely]]
+    {
+        perror("Could not set source file position indicator to end of file: ");
+        std::abort();
+    }
+    if( (file_size = ftell(hirola_program_fd)) == 0 ) [[unlikely]]
+    {
+        perror("Size of Hirola source code file is 0 bytes. Cannot compile.\n");
+        std::abort();
+    }
+    if( fseek(hirola_program_fd, 0, SEEK_SET) == -1 ) [[unlikely]]
+    {
+        perror("Could not set source file position indicator back to start: ");
+        std::abort();
+    }
+    if( (source_code_buf = (uint8_t*)malloc(file_size)) == NULL ) [[unlikely]]
+    {
+        perror("Heap allocation failed for source file contents buffer: ");
+        std::abort();
+    }
 
-/*
-    std::string first_program =
-        "BLOCK_START PROGRAM\n"
-        "x = 5;\n"
-        "base = (x + 105);\n"
-        "kk = ( (base * 1000000) - (x * x));\n"
-        "c = ( (x - (base * base)) / kk );\n"
-        "BLOCK_END";
-*/
-/*
-std::string first_program =
-    "BLOCK_START PROGRAM\n"
-    "x = 5;\n"
-    "y = 12;\n"
-    "z = 7;\n"
-    "alpha = 3;\n"
-    "beta = 9;\n"
-    "gamma = 14;\n"
-    "delta = 2;\n"
-    "epsilon = 21;\n"
-    "base = (x + 105);\n"
-    "scale = (y * 3);\n"
-    "offset = (z - x);\n"
-    "shift = (alpha + beta);\n"
-    "twist = (gamma - delta);\n"
-    "fold = (epsilon / alpha);\n"
-    "kk = ( (base * 1000000) - (x * x));\n"
-    "mm = ( (scale + offset) * 2);\n"
-    "nn = ( (kk - mm) / 4);\n"
-    "c = ( (x - (base * base)) / kk );\n"
-    "d = ( (y + z) * (x - 1));\n"
-    "e = ( (d * d) - (c * c));\n"
-    "f = ( (e / 2) + 17);\n"
-    "g = ( (f - nn) * 3);\n"
-    "h = ( (g + base) / (scale + 1));\n"
-    "i = ( (h * mm) - (offset * offset));\n"
-    "j = ( (i + 1000) / 13);\n"
-    "k = ( (j - x) * (y + z));\n"
-    "l = ( (k / 7) + (d - e));\n"
-    "m = ( (l * l) - 256);\n"
-    "n = ( (m + g) / (h - 1));\n"
-    "o = ( (n * 9) - (f * f));\n"
-    "p = ( (o + j) / (k - mm));\n"
-    "q = ( (p - n) * (i + 1));\n"
-    "r = ( (q / 3) + (base * scale));\n"
-    "s = ( (r - offset) * (y - z));\n"
-    "t = ( (s + 42) / ((x + y) + z));\n"
-    "u = ( (t * t) - (s * r));\n"
-    "v = ( (u + q) / (p - 2));\n"
-    "w = ( (v - m) * (l + k));\n"
-    "aa = ( (w / 5) + (n - o));\n"
-    "bb = ( (aa * aa) - (u * v));\n"
-    "cc = ( (bb + w) / (aa - 1));\n"
-    "dd = ( (cc - t) * (s + r));\n"
-    "ee = ( (dd / 6) + (q * p));\n"
-    "ff = ( (ee - n) * (m - l));\n"
-    "gg = ( (ff + cc) / (dd - bb));\n"
-    "hh = ( (gg * 2) - (aa + bb));\n"
-    "ii = ( (hh / 4) + (cc * dd));\n"
-    "jj = ( (ii - ee) * (ff + gg));\n"
-    "kkb = ( (jj + hh) / (ii - 3));\n"
-    "ll = ( (kkb * kkb) - (jj * ii));\n"
-    "mmb = ( (ll / 8) + (hh - gg));\n"
-    "nnb = ( (mmb - ff) * (ee + dd));\n"
-    "oo = ( (nnb + cc) / (bb - aa));\n"
-    "pp = ( (oo * 7) - (nnb * mmb));\n"
-    "qq = ( (pp / 9) + (ll - kkb));\n"
-    "rr = ( (qq - jj) * (ii + hh));\n"
-    "ss = ( (rr + gg) / (ff - ee));\n"
-    "tt = ( (ss * ss) - (dd * cc));\n"
-    "uu = ( (tt / 10) + (bb - aa));\n"
-    "vv = ( (uu - oo) * (pp + qq));\n"
-    "ww = ( (vv + rr) / (ss - 1));\n"
-    "xx = ( (ww * 11) - (uu * tt));\n"
-    "yy = ( (xx / 12) + (vv - ww));\n"
-    "zz = ( (yy - rr) * (ss + tt));\n"
-    "chainOne = ( ( ((x + y) - z) * ((alpha + beta) - gamma) ) + ((delta * epsilon) / shift) );\n"
-    "chainTwo = ( ( ( (base + scale) - (offset * twist) ) + (fold / shift) ) - (kk + mm) );\n"
-    "chainThree = ( ( ( (nn - oo) + (pp * qq) ) / ( (rr - ss) + (tt * uu) ) ) * (vv - ww) );\n"
-    "chainFour = ( ( ( ((aa + bb) + cc) + dd) - ( ((ee + ff) + gg) + hh) ) + ((ii - jj) * (kkb + ll)) );\n"
-    "chainFive = ( ( ( (d - e) * (f - g) ) + ( (h - i) * (j - k) ) ) - ( (l - m) * (n - o) ) );\n"
-    "chainSix = ( ( ( ( ( (p / q) + (r / s) ) - (t / u) ) + (v / w) ) - (aa / bb) ) + (cc / dd) );\n"
-    "chainSeven = ( ( ( (shift + twist) - fold) * ( (base - scale) + offset) ) / ( (kkb - ll) + mmb) );\n"
-    "chainEight = ( ( ( ((x * y) * z) - ((alpha * beta) * gamma) ) + ((delta * epsilon) * shift) ) - (twist * fold) );\n"
-    "chainNine = ( ( ( (x + 1) * (y + 2) ) - ( (z + 3) * (alpha + 4) ) ) + ( (beta - gamma) * (delta - epsilon) ) );\n"
-    "chainTen = ( ( ( ( ( (nnb + oo) - (pp + qq) ) + (rr - ss) ) - (tt + uu) ) + (vv - ww) ) - (xx + yy) );\n"
-    "resultOne = ( ( (chainOne + chainTwo) - (chainThree * chainFour) ) + (chainFive / chainSix) );\n"
-    "resultTwo = ( ( (chainSeven - chainEight) * (chainNine + chainTen) ) / (zz - yy) );\n"
-    "resultThree = ( ( (resultOne + resultTwo) - (xx * yy) ) / ( (zz + ww) - (vv * uu) ) );\n"
-    "final = ( ( ( (resultThree * 2) + (kk - mm) ) - ( (nn * oo) / (pp + qq) ) ) + ( (rr - ss) * (tt + uu) ) );\n"
-    "BLOCK_END";
-*/
+    bytes_read = fread(source_code_buf, 1, file_size, hirola_program_fd);
+
+    if(bytes_read != file_size || ferror(hirola_program_fd))
+    {
+        printf("Error while reading source code file contents.\n");
+        std::abort();
+    }
+
+    target_str = std::string((const char*)source_code_buf, file_size);
+
+    free(source_code_buf);
+    return;
+}
+
+int main(int argc, char* argv[])
+{
+    struct      timespec tv1;
+    struct      timespec tv2;
+    std::string source_code_str;
+
+    /* Compiler called using:  hirola input_file.hir output_file */
+    if(argc != 3) [[unlikely]]
+    {
+        printf("Specify Hirola source code filepath, then output filepath.\n");
+        std::abort();
+    }
+
+    grab_source_code_string(argv[1], source_code_str);
+
     std::cout << "Tokenizing the following program:\n\n"
-              << first_program << "\n\n";
+              << source_code_str << "\n\n";
 
-    Lexer lexer1(std::move(first_program));
+    Lexer lexer1(std::move(source_code_str));
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &tv1);
     lexer1.Tokenize_Source_Code();
