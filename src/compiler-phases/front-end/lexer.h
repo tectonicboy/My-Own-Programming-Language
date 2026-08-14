@@ -277,6 +277,17 @@ void Lexer::Tokenize_Source_Code(void)
 
     for(cursor = 0; cursor < source_code_len;)
     {
+        if(source_code[cursor] == '\n' )
+        {
+            lex_newline();
+            continue;
+        }
+        if(source_code[cursor] == ' ' || source_code[cursor] == '\t')
+        {
+            lex_whitespace();
+            continue;
+        }
+
         /* One or more Code Blocks make up the program. Enforce this here and
          * in the code for reaching the end of the program (so, all token
          * processor functions for multi-character token types), as well as at
@@ -301,10 +312,8 @@ void Lexer::Tokenize_Source_Code(void)
             }
 
         }
-        if (source_code[cursor] == ' ' || source_code[cursor] == '\t')
-            lex_whitespace();
 
-        else if (   source_code[cursor] == '+' || source_code[cursor] == '-'
+        if (   source_code[cursor] == '+' || source_code[cursor] == '-'
                  || source_code[cursor] == '*' || source_code[cursor] == '/'
                  || source_code[cursor] == '='
                 )
@@ -313,7 +322,6 @@ void Lexer::Tokenize_Source_Code(void)
         else if(isalpha(source_code[cursor]) || (source_code[cursor] == '_'))
             lex_identifier_and_keyword();
 
-        else if(source_code[cursor] == '\n' ) { lex_newline();          }
         else if(source_code[cursor] == ';'  ) { lex_semicolon();        }
         else if(source_code[cursor] == '('  ) { lex_open_paren();       }
         else if(source_code[cursor] == ')'  ) { lex_close_paren();      }
