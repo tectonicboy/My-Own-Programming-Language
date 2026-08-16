@@ -1,5 +1,144 @@
 /*----------------------------------------------------------------------------*/
 
+/* COMPILER BOOKKEEPING: The Token Array and associated bookkeeping items. */
+
+/* Lookup table of current language reserved keywords. */
+constexpr size_t total_keywords = 3;
+
+constexpr uint32_t KEYWORD_BLOCK_START = 0;
+constexpr uint32_t KEYWORD_BLOCK_END   = 1;
+constexpr uint32_t KEYWORD_PROGRAM     = 2;
+
+constexpr std::array<const char*, total_keywords>
+reserved_keyword_strings =
+{
+    "BLOCK_START",
+    "BLOCK_END",
+    "PROGRAM"
+};
+
+/* Lookup table of current token types accepted in the language. */
+constexpr size_t total_token_types = 7;
+
+constexpr uint32_t TOKEN_TYPE_IDENTIFIER       = 0;
+constexpr uint32_t TOKEN_TYPE_KEYWORD          = 1;
+constexpr uint32_t TOKEN_TYPE_OPEN_PAREN       = 2;
+constexpr uint32_t TOKEN_TYPE_CLOSE_PAREN      = 3;
+constexpr uint32_t TOKEN_TYPE_OPERATOR         = 4;
+constexpr uint32_t TOKEN_TYPE_SEMICOLON        = 5;
+constexpr uint32_t TOKEN_TYPE_NUM_LITERAL_UINT = 6;
+
+constexpr std::array<const char*, total_token_types>
+token_type_strings =
+{
+    "Identifier",
+    "Keyword",
+    "Open Parenthesis",
+    "Close Parenthesis",
+    "Operator",
+    "Semicolon",
+    "Number Literal Unsigned Int"
+};
+
+/* The descriptor of a Token. Members arranged to eliminate padding bytes. */
+class Token
+{
+public:
+    std::string_view  token_value;
+    uint64_t          token_line_in_src;
+    uint32_t          token_col_in_src;
+    uint32_t          token_type_ix;
+
+    /* Constructor. */
+    explicit Token(std::string_view value_text, uint64_t line_in_src,
+                   uint32_t col_in_src, uint32_t type_ix)
+    : token_value(value_text), token_line_in_src(line_in_src),
+      token_col_in_src(col_in_src), token_type_ix(type_ix) {}
+
+    void Print_Token_Info(void) const
+    {
+        std::cout << "---------------------------------\n"
+                  << "Token type  : " << token_type_strings[token_type_ix]
+                  << "\n"
+                  << "Token value : " << token_value << "\n"
+                  << "At src line : " << token_line_in_src
+                  << ":" << token_col_in_src << "\n"
+                  << "---------------------------------\n";
+    }
+};
+
+/* The Token Array. */
+
+class Token_Array
+{
+private:
+    constexpr static size_t token_array_default_init_capcity = 100'000;
+    size_t initial_capacity;
+    std::vector<Token> token_array_vec;
+
+public:
+kie
+    /* Constructor. */
+    explicit Token_Array(const size_t init_capacity_in, bool prefill_entries)
+    {
+        if( ! init_capacity_in )
+            initial_capacity = token_array_default_init_capcity;
+        else
+            initial_capacity = init_capacity_in;
+
+        if(prefill_entries)
+            token_array_vec =
+                std::vector(initial_capacity, Token("", 0, 0, 0));
+        else
+                token_array_vec.reserve(initial_capacity);
+    }
+
+    /* Move constructor.
+     *
+     * For example, used to transport it from a Lexer to a Parsing Orchestrator.
+     */
+    Token_Array(Token_Array&& old_token_arr)
+    : initial_capacity(old_token_arr.token_array_vec.capacity()),
+      token_array_vec(std::move(old_token_arr.token_array_vec)) {}
+
+    /* Overloaded operator[]. */
+
+    /* Returns a mutable Lvalue reference to an entry, directly modifyable. */
+    Token& operator[](const size_t token_ix)
+    {
+        return token_array_vec[token_ix];
+    }
+
+    /* Returns a const Lvalue reference to an entry, not modifyable. */
+    const Token& operator[](const size_t token_ix) const
+    {
+        return token_array_vec[token_ix];
+    }
+
+    /* Get size */
+    size_t size(void)
+    {
+        return token_array_vec.size();
+    }
+
+    /* Emplace at the back. */
+    void emplace_back(std::string_view token_val, uint64_t src_line,
+                      uint32_t src_col, uint32_t type)
+    {
+        token_array_vec.emplace_back(Token(token_val, src_line, src_col, type));
+        return;
+    }
+
+#define VERIFY_N_TOKENS_AFTER_CURSOR_EXIST(tok_arr, cursor, N) \
+    if((tok_arr)->size() - ((cursor) + 1) < (N)) [[unlikely]]  \
+    {                                                          \
+        std::cout << "Error: Incomplete program.\n";           \
+        std::abort();                                          \
+    }
+};
+
+/*----------------------------------------------------------------------------*/
+
 /* COMPILER BOOKKEEPING: The Code Block Directory. */
 
 /* Lookup table of Code Block types. */
@@ -113,6 +252,13 @@ public:
         return code_block_dir_vec.size();
     }
 };
+
+/*----------------------------------------------------------------------------*/
+
+/* COMPILER BOOKKEEPING: The Symbol Table. */
+
+
+
 
 /*----------------------------------------------------------------------------*/
 

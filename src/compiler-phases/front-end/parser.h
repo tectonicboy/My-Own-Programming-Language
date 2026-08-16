@@ -18,13 +18,6 @@ EMIT_ERR_IF_SYMBOL_ABSENT_OR_GET_PTR(symbols, iter, name, ptr, src_line)       \
     }                                                                          \
     (ptr) = &((iter)->second);
 
-#define VERIFY_N_TOKENS_AFTER_CURSOR_EXIST(tok_arr, cursor, N) \
-    if((tok_arr)->size() - ((cursor) + 1) < (N)) [[unlikely]]  \
-    {                                                          \
-        std::cout << "Error: Incomplete program.\n";           \
-        std::abort();                                          \
-    }
-
 /*----------------------------------------------------------------------------*/
 
 /* The Parser and Parsing Orchestrator classes. */
@@ -36,7 +29,7 @@ private:
 
 public:
     /* Receives these from the Lexer. */
-    std::vector<Token> token_array;
+    Token_Array token_array;
     Code_Block_Directory code_block_dir;
 
     /* Receives this from the top-level compilation driver. */
@@ -50,7 +43,7 @@ public:
     /* Constructor. */
     explicit ParsingOrchestrator
         (Code_Block_Directory&& code_block_dir_in,
-         std::vector<Token>&& token_array_in,
+         Token_Array&& token_array_in,
          std::vector<std::vector<size_t>>&& parser_quotas_in)
     : symbol_table_size(10'000),
       token_array(std::move(token_array_in)),
@@ -71,7 +64,7 @@ public:
     std::unordered_map<std::string, Symbol>* symbol_table;
     Code_Block_Directory* code_block_dir;
     std::vector<size_t>* which_blocks_to_parse;
-    std::vector<Token>* token_array;
+    Token_Array* token_array;
     MEM_Arena* ast_arena;
     Statement_Directory* statement_dir;
 
@@ -80,7 +73,7 @@ public:
         (std::unordered_map<std::string, Symbol>* symbol_table_in,
          Code_Block_Directory* code_block_dir_in,
          std::vector<size_t>* code_blocks_to_parse_in,
-         std::vector<Token>* token_array_in,
+         Token_Array* token_array_in,
          MEM_Arena* ast_arena_in, Statement_Directory* statement_dir_in)
     : symbol_table(symbol_table_in), code_block_dir(code_block_dir_in),
       which_blocks_to_parse(code_blocks_to_parse_in),

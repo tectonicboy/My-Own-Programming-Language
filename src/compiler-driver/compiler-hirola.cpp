@@ -20,7 +20,6 @@
 #include "../compiler-data-structures/bookkeeping-structures.hpp"
 #include "../compiler-data-structures/custom-mem-arena.hpp"
 
-#include "../compiler-phases/front-end/token.h"
 #include "../compiler-phases/front-end/lexer.h"
 #include "../compiler-phases/front-end/ast.h"
 #include "../compiler-phases/front-end/parser.h"

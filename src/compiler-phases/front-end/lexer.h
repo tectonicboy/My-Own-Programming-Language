@@ -30,7 +30,7 @@ private:
 public:
     /* Spawns into existence these new things. */
     /* Transfers them to the Parsing Orchestrator after lexing. */
-    std::vector<Token> token_array;
+    Token_Array token_array;
     Code_Block_Directory code_block_dir;
 
     /* Constructor. */
@@ -38,11 +38,8 @@ public:
     : current_line_ix(1), current_col_ix(1), inside_code_block(false),
       source_code(std::move(source_code_in)),
       source_code_len(source_code.length()),
-      code_block_dir(Code_Block_Directory(0, 0))
-    {
-        /* This avoids excessive hidden vector heap allocations at runtime. */
-        token_array.reserve(10'000);
-    }
+      token_array(Token_Array(0, 0)),
+      code_block_dir(Code_Block_Directory(0, 0)) {}
 
     void Tokenize_Source_Code(void);
 
