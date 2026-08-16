@@ -169,8 +169,7 @@ int main(int argc, char* argv[])
     }
     std::cout << "\n";
     IR_Generation_Orchestrator my_ir_generation_orchestrator
-        (std::move(my_parsing_orchestrator.symbol_table),
-         std::move(my_parsing_orchestrator.ast_arena),
+        (std::move(my_parsing_orchestrator.ast_arena),
          std::move(my_parsing_orchestrator.statement_dir),
          std::move(my_parsing_orchestrator.parsing_quotas));
     my_ir_generation_orchestrator.spawn_IR_generator

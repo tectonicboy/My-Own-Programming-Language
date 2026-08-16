@@ -77,7 +77,6 @@ private:
     std::vector<Token> token_array_vec;
 
 public:
-kie
     /* Constructor. */
     explicit Token_Array(const size_t init_capacity_in, bool prefill_entries)
     {
@@ -257,8 +256,95 @@ public:
 
 /* COMPILER BOOKKEEPING: The Symbol Table. */
 
+constexpr uint8_t TOTAL_SYMBOL_KINDS   = 2;
+constexpr uint8_t SYMBOL_KIND_UINT64   = 0;
+constexpr uint8_t SYMBOL_KIND_FUNCTION = 1;
 
+constexpr std::array<const char*, TOTAL_SYMBOL_KINDS>
+symbol_kinds_lookuptable =
+{
+    "uint64",
+    "function"
+};
 
+class Symbol
+{
+public:
+    std::string symbol_name;
+    uint8_t     symbol_kind_ix;
+    uint64_t    symbol_type;
+    uint64_t    SSA_IR_mangle_counter;
+
+    /* Constructor. */
+    explicit
+    Symbol(uint8_t kind_input, std::string name_input, uint64_t type_in)
+    : symbol_name(name_input), symbol_kind_ix(kind_input), symbol_type(type_in),
+      SSA_IR_mangle_counter(1) {}
+
+    void print_symbol_name(void) const
+    {
+        std::cout << symbol_name;
+    }
+
+    void print_symbol_kind(void) const
+    {
+        std::cout << symbol_kinds_lookuptable[symbol_kind_ix];
+    }
+
+    void print_symbol_type(void) const
+    {
+        std::cout << symbol_type;
+    }
+};
+
+#define SYMTABLE_EXACT_CONTAINER_TYPE std::unordered_map<std::string, Symbol>
+
+class Symbol_Table
+{
+private:
+    constexpr static size_t symtable_default_init_capacity = 10'000;
+
+public:
+    size_t initial_capacity;
+    SYMTABLE_EXACT_CONTAINER_TYPE symbol_table_hashmap;
+
+    /* Constructor. */
+    Symbol_Table(size_t init_capacity_in)
+    {
+        if( ! init_capacity_in )
+            initial_capacity = symtable_default_init_capacity;
+        else
+            initial_capacity = init_capacity_in;
+
+        symbol_table_hashmap.reserve(initial_capacity);
+    }
+
+    /* Move constructor. For completeless, unused for now. */
+    Symbol_Table(Symbol_Table&& old_symtable)
+    : initial_capacity(old_symtable.symbol_table_hashmap.size()),
+      symbol_table_hashmap(std::move(old_symtable.symbol_table_hashmap)) {}
+
+#define ADD_SYMBOL_IF_ABSENT_AND_GET_PTR(symbols, iter, name, type, val, ptr)  \
+    (iter) = (symbols)->symbol_table_hashmap.find((name));                     \
+    if( (iter) == (symbols)->symbol_table_hashmap.end() ) [[unlikely]]         \
+    {                                                                          \
+        (iter) = ((symbols)->symbol_table_hashmap.emplace                      \
+                        ((name), Symbol((type), (name), (val)))).first;        \
+    }                                                                          \
+    (ptr) = &((iter)->second);
+
+#define \
+EMIT_ERR_IF_SYMBOL_ABSENT_OR_GET_PTR(symbols, iter, name, ptr, src_line)       \
+    (iter) = (symbols)->symbol_table_hashmap.find((name));                     \
+    if( (iter) == (symbols)->symbol_table_hashmap.end() ) [[unlikely]]         \
+    {                                                                          \
+        std::cout << "Error: Symbol on RHS of assignment not initialized.\n";  \
+        std:: cout << "Line: " << (src_line) << "\n";                          \
+        std::abort();                                                          \
+    }                                                                          \
+    (ptr) = &((iter)->second);
+
+};
 
 /*----------------------------------------------------------------------------*/
 

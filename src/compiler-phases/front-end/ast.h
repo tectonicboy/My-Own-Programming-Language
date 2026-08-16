@@ -1,14 +1,10 @@
-/* Counters for total symbol kinds, statement kinds and expression kinds. */
-constexpr uint8_t TOTAL_SYMBOL_KINDS     = 2;
+/* Counters for total statement kinds and expression kinds. */
 constexpr uint8_t TOTAL_STATEMENT_KINDS  = 5;
 constexpr uint8_t TOTAL_EXPRESSION_KINDS = 3;
 
-/* Lookup tables with named indices for the kinds of Statements, Expressions
- * and Symbols found in the language.
+/* Lookup tables with named indices for the kinds of Statements and Expressions
+ * found in the language
  */
-constexpr uint8_t SYMBOL_KIND_UINT64   = 0;
-constexpr uint8_t SYMBOL_KIND_FUNCTION = 1;
-
 constexpr uint8_t STATEMENT_KIND_ASSIGNMENT = 0;
 constexpr uint8_t STATEMENT_KIND_IF         = 1;
 constexpr uint8_t STATEMENT_KIND_ELSE       = 2;
@@ -18,13 +14,6 @@ constexpr uint8_t STATEMENT_KIND_FUNC_CALL  = 4;
 constexpr uint8_t EXPR_KIND_UINT64_LITERAL = 0;
 constexpr uint8_t EXPR_KIND_IDENTIFIER     = 1;
 constexpr uint8_t EXPR_KIND_BIN_OPERATION  = 2;
-
-constexpr std::array<const char*, TOTAL_SYMBOL_KINDS>
-symbol_kinds_lookuptable =
-{
-    "uint64",
-    "function"
-};
 
 constexpr std::array<const char*, TOTAL_STATEMENT_KINDS>
 statement_kinds_lookuptable =
@@ -44,37 +33,6 @@ expression_kinds_lookuptable =
     "binary_operation"
 };
 
-/*----------------------------------------------------------------------------*/
-
-class Symbol
-{
-public:
-    std::string symbol_name;
-    uint8_t     symbol_kind_ix;
-    uint64_t    symbol_type;
-    uint64_t    SSA_IR_mangle_counter;
-
-    /* Constructor. */
-    explicit
-    Symbol(uint8_t kind_input, std::string name_input, uint64_t type_in)
-    : symbol_name(name_input), symbol_kind_ix(kind_input), symbol_type(type_in),
-      SSA_IR_mangle_counter(1) {}
-
-    void print_symbol_name(void) const
-    {
-        std::cout << symbol_name;
-    }
-
-    void print_symbol_kind(void) const
-    {
-        std::cout << symbol_kinds_lookuptable[symbol_kind_ix];
-    }
-
-    void print_symbol_type(void) const
-    {
-        std::cout << symbol_type;
-    }
-};
 /*----------------------------------------------------------------------------*/
 
 /* Abstract class. Concrete subclasses are the different expression kinds. */

@@ -8,7 +8,6 @@ class IR_Generation_Orchestrator
 
 public:
     /* Receives these from a Parsing_Orchestrator: */
-    std::unordered_map<std::string, Symbol> symbol_table;
     MEM_Arena ast_arena;
     Statement_Directory statement_dir;
 
@@ -21,10 +20,10 @@ public:
 
     /* Constructor */
     explicit IR_Generation_Orchestrator
-        (std::unordered_map<std::string, Symbol>&& sym_table_in,
-         MEM_Arena&& ast_arena_in, Statement_Directory&& statement_dir_in,
+        (MEM_Arena&& ast_arena_in,
+         Statement_Directory&& statement_dir_in,
          std::vector<std::vector<size_t>>&& IR_gen_quotas_in)
-    : symbol_table(std::move(sym_table_in)), ast_arena(std::move(ast_arena_in)),
+    : ast_arena(std::move(ast_arena_in)),
       statement_dir(std::move(statement_dir_in)),
       IR_instructions_arena(MEM_Arena(std::string("IR Instructions Arena"))),
       IR_instructions_dir(IR_Instructions_Directory(0, 0)),
@@ -37,7 +36,6 @@ class IR_Generator
 {
 private:
     /* Receives from an IR Generation Orchestrator: */
-    std::unordered_map<std::string, Symbol>* symbol_table;
     MEM_Arena* ast_arena;
     Statement_Directory* statement_dir;
     MEM_Arena* IR_instructions_arena;
@@ -56,12 +54,11 @@ private:
 public:
     /* Constructor */
     explicit IR_Generator
-        (std::unordered_map<std::string, Symbol>* sym_table_ptr_in,
-         MEM_Arena* ast_arena_ptr_in, Statement_Directory* statement_dir_ptr_in,
+        (MEM_Arena* ast_arena_ptr_in, Statement_Directory* statement_dir_ptr_in,
          MEM_Arena* IR_instructions_arena_ptr_in,
          IR_Instructions_Directory* IR_instructions_dir_in,
          std::vector<size_t> IR_generation_quota_in)
-    : symbol_table(sym_table_ptr_in), ast_arena(ast_arena_ptr_in),
+    : ast_arena(ast_arena_ptr_in),
       statement_dir(statement_dir_ptr_in),
       IR_instructions_arena(IR_instructions_arena_ptr_in),
       IR_instructions_dir(IR_instructions_dir_in),
@@ -132,11 +129,12 @@ uint8_t IR_Generation_Orchestrator::spawn_IR_generator
 {
     uint8_t ret = 0;
     IR_Generator my_IR_generator
-       (&(this->symbol_table), &(this->ast_arena), &(this->statement_dir),
-        &(this->IR_instructions_arena), &(this->IR_instructions_dir),
-        selected_IR_generation_quota);
+        (&(ast_arena), &(statement_dir), &(IR_instructions_arena),
+         &(IR_instructions_dir), selected_IR_generation_quota);
+
     ret = my_IR_generator.emit_IR();
     if(ret) [[unlikely]] { return ret; }
+
     std::cout << "\n  ****  IR generation successful!  ****\n\n";
     std::cout << "IR Instructions emitted: "
               << IR_instructions_dir.size() << "\n";

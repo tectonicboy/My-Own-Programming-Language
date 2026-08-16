@@ -1,32 +1,7 @@
-#define ADD_SYMBOL_IF_ABSENT_AND_GET_PTR(symbols, iter, name, type, val, ptr)  \
-    (iter) = (symbols)->find((name));                                          \
-    if( (iter) == (symbols)->end() ) [[unlikely]]                              \
-    {                                                                          \
-        (iter) =                                                               \
-            ((symbols)->emplace((name), Symbol((type), (name), (val)))).first; \
-    }                                                                          \
-    (ptr) = &((iter)->second);
-
-#define \
-EMIT_ERR_IF_SYMBOL_ABSENT_OR_GET_PTR(symbols, iter, name, ptr, src_line)       \
-    (iter) = (symbols)->find((name));                                          \
-    if( (iter) == (symbols)->end() ) [[unlikely]]                              \
-    {                                                                          \
-        std::cout << "Error: Symbol on RHS of assignment not initialized.\n";  \
-        std:: cout << "Line: " << (src_line) << "\n";                          \
-        std::abort();                                                          \
-    }                                                                          \
-    (ptr) = &((iter)->second);
-
-/*----------------------------------------------------------------------------*/
-
 /* The Parser and Parsing Orchestrator classes. */
 
 class ParsingOrchestrator
 {
-private:
-    size_t symbol_table_size;
-
 public:
     /* Receives these from the Lexer. */
     Token_Array token_array;
@@ -36,7 +11,7 @@ public:
     std::vector<std::vector<size_t>> parsing_quotas;
 
     /* Brings into existence these new things. */
-    std::unordered_map<std::string, Symbol> symbol_table;
+    Symbol_Table symbol_table;
     MEM_Arena ast_arena;
     Statement_Directory statement_dir;
 
@@ -45,15 +20,12 @@ public:
         (Code_Block_Directory&& code_block_dir_in,
          Token_Array&& token_array_in,
          std::vector<std::vector<size_t>>&& parser_quotas_in)
-    : symbol_table_size(10'000),
-      token_array(std::move(token_array_in)),
+    : token_array(std::move(token_array_in)),
       code_block_dir(std::move(code_block_dir_in)),
       parsing_quotas(std::move(parser_quotas_in)),
+      symbol_table(Symbol_Table(0)),
       ast_arena(MEM_Arena(std::string("AST Arena"))),
-      statement_dir(Statement_Directory(0, false))
-    {
-        symbol_table.reserve(symbol_table_size);
-    }
+      statement_dir(Statement_Directory(0, false)) {}
 
     uint8_t spawn_parser(std::vector<size_t> parsing_quota);
 };
@@ -61,7 +33,7 @@ public:
 class Parser
 {
 public:
-    std::unordered_map<std::string, Symbol>* symbol_table;
+    Symbol_Table* symbol_table;
     Code_Block_Directory* code_block_dir;
     std::vector<size_t>* which_blocks_to_parse;
     Token_Array* token_array;
@@ -70,7 +42,7 @@ public:
 
     /* Constructor. */
     explicit Parser
-        (std::unordered_map<std::string, Symbol>* symbol_table_in,
+        (Symbol_Table* symbol_table_in,
          Code_Block_Directory* code_block_dir_in,
          std::vector<size_t>* code_blocks_to_parse_in,
          Token_Array* token_array_in,
@@ -123,7 +95,7 @@ uint8_t ParsingOrchestrator::spawn_parser(std::vector<size_t> parsing_quota)
 uint8_t Parser::parse_bin_op_expr(size_t* token_cursor, size_t* passed_offset)
 {
     Symbol* symbol_ptr = nullptr;
-    std::unordered_map<std::string, Symbol>::iterator symbol_table_iterator;
+    SYMTABLE_EXACT_CONTAINER_TYPE::iterator symbol_table_iterator;
     AST_Node_Expression* rhs_expr_node_ptr = nullptr;
     AST_Node_Expression* lhs_expr_node_ptr = nullptr;
     std::string bin_operator;
@@ -255,7 +227,7 @@ uint8_t Parser::parse_bin_op_expr(size_t* token_cursor, size_t* passed_offset)
 uint8_t Parser::parse_assignment_statement(size_t* token_cursor,
                                            size_t* this_node_wr_offset)
 {
-    std::unordered_map<std::string, Symbol>::iterator symbol_table_iterator;
+    SYMTABLE_EXACT_CONTAINER_TYPE::iterator symbol_table_iterator;
     Symbol* symbol_ptr = nullptr;
     Symbol* lhs_symbol_ptr = nullptr;
     AST_Node_Expression* rhs_expr_node_ptr = nullptr;
@@ -492,7 +464,7 @@ uint8_t Parser::parse_statements(size_t* start_token_cursor,
         if(statement_dir_entry_adding)
         {
             (*statement_dir).emplace_back(block_dir_ix, statement_ix,
-                                                arena_offset_to_statement);
+                                          arena_offset_to_statement);
             ++statement_ix;
         }
     }
