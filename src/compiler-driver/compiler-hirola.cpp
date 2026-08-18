@@ -12,19 +12,20 @@
 #include <cstring>
 #include <cerrno>
 #include <unordered_map>
-
 #include <stdlib.h>
 
-#include "../auxilliary-header-files/compiler-constants.hpp"
+#include "../auxilliary-header-files/compiler-constants.h"
 
-#include "../compiler-data-structures/bookkeeping-structures.hpp"
-#include "../compiler-data-structures/custom-mem-arena.hpp"
+#include "../compiler-data-structures/front-end-structures.h"
+#include "../compiler-data-structures/middle-end-structures.h"
+#include "../compiler-data-structures/back-end-structures.h"
+#include "../compiler-data-structures/custom-data-structures/custom-mem-arena.h"
 
 #include "../compiler-phases/front-end/lexer.h"
 #include "../compiler-phases/front-end/ast.h"
 #include "../compiler-phases/front-end/parser.h"
-#include "../compiler-phases/middle-end/ir-instructions.hpp"
-#include "../compiler-phases/middle-end/ir-generator.hpp"
+#include "../compiler-phases/middle-end/ir-instructions.h"
+#include "../compiler-phases/middle-end/ir-generator.h"
 
 void grab_source_code_string(char* source_file_name, std::string& target_str)
 {
