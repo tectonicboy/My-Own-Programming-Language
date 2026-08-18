@@ -1,12 +1,16 @@
-OVERVIEW OF THIS DOCUMENT
-=========================
+################################################################################
+################################################################################
 
-All essential information about the Hirola language compiler can be found here.
+OVERVIEW OF THE DOCUMENTATION
+=============================
 
-This document is divided into 3 main chapters describing, respectively, the
-compiler's three primary subsystems: front end, middle end and back end.
-Each subsystem and its overall design, data structures and algorithms have both
-their high-level design and C++ implementation described here.
+All essential information about the Hirola language compiler, the project
+itself, the directory and file structure and their contents are found here.
+
+This document is divided into 4 main chapters describing, respectively, the
+compiler's three primary subsystems: front end, middle end and back end, as well
+as a chapter dedicated to the custom C++ data structures implemented to be used
+throughout the compiler's implementation.
 
 A separate document describes various optimizations and contains writeups of
 CPU microarchitecture-aware performance analyses conducted on the compiler.
@@ -17,7 +21,6 @@ TABLE OF CONTENTS
 
 Documentation overview...............................................
 Table of contents....................................................
-Compiler design overview.............................................
 
 CHAPTER I: Hirola Compiler Front End.................................
 1.  Front End overview...............................................
@@ -27,19 +30,17 @@ CHAPTER I: Hirola Compiler Front End.................................
 5.  Source file contents summary for the Front End...................
 
 CHAPTER II: Hirola Compiler Middle End...............................
-6.  Middle End overview..............................................
-7.  Hirola Intermediate Representation in SSA Form...................
-8.  SSA IR Generator.................................................
-9.  Compiler Optimizations [Middle End]..............................
-10. Source file contents summary for the Middle End..................
+6.  SSA IR code and how it's generated from the AST as input.........
 
 Chapter III: Hirola Compiler Back End................................
-11. Back End overview................................................
-12. Emitting x86_64 assembly code....................................
-13. Emitting AArch64 assembly code...................................
-14. Compiler Optimizations [Back End]................................
-15. Source file contents summary for the Back End....................
+7.  EMPTY FOR NOW....................................................
 
+Chapter IV: Custom data structures implemented for the compiler......
+8. Overview of the special data structures...........................
+9. Custom Memory Arena...............................................
+
+################################################################################
+################################################################################
 
 Chapter I: Hirola Compiler Front End
 --------------------------------------------------------------------------------
@@ -56,194 +57,386 @@ are reported if the written program contains unrecognized tokens. Maintained
 are the lines and columns at which each token appears, to make error reporting
 by the compiler easy to understand and high-quality.
 
-During parsing, the token array is converted into an Abstract Syntax Tree (AST).
-The AST contains one node for each encountered language construct. For instance,
-the binary operation (a + b) has its own AST Node that contains the sign symbol
-and pointers to the AST Nodes of the two operands, which themselves might be
-binary operations. Two kinds of errors are caught and reported during parsing:
-syntax errors such as missing parenthesis or semicolons, and basic semantic
-errors, such as reading a variable that has not yet been initialized.
-Implementing the AST generating parser was complicated by the fact that the
-AST is placed, node by node, inside a special memory arena, which is contiguous
-to boost spatial cache locality, rather than each Node residing in its own
-small dynamically allocated memory chunk. This is called data-oriented design
-and improves the way modern CPUs are utilized given their microarchitecture.
+During parsing, the token array is converted into an Abstract Syntax Tree. The
+AST contains 1 or more Nodes for each encountered language construct.
+
+For example, the binary operation (a + b) has its own Expression AST Node
+containing the sign token and pointers to the AST Nodes of the 2 operands,
+which may be BinOps themselves.
+
+Two byproducts are produced during AST construction as well: The Symbol Table
+and the Statement Directory.
+
+Two error families are caught and reported during AST construction: syntax ones
+such as missing parentheses or semicolons and basic semantic errors, such as
+reading a variable that has not yet been initialized.
+
+The AST is placed inside a special hand-managed memory arena, which holds all
+the AST Nodes contiguously, in order to boost spatial cache locality for faster
+compilation, rather than each AST Node residing in its own small dynamically
+allocated memory chunk. This is called data-oriented design and improves the way
+modern CPUs are utilized with respect to their microarchitecture. A pointer to
+the root AST Node of each source statement is held in the Statement Directory.
+
+Large data structures, such as the Token Array, are transferred from the Lexer
+to the Parsing Orchestrator and further ahead via move semantics.
 
 A separate Semantic Analysis pass does not exist yet, but likely will later on.
 
-
-2. Lexer
-========
-
-The Lexer carries out the operation of turning the written source code program
-into the array of tokens. This is the primary output of the Lexer. It also has
-1 secondary output as a byproduct - Auxilliary Code Block Directory, which is
-simply an array of entries, where each entry gives the index of the start and
-end token of each Code Block, plus the type of the Code Block.
-
-A Code Block is a building block of the source program, is surrounded by { and }
-with its start and end designated with special syntax. Examples of Code Blocks
-are function definitions, the main program block, a custom data structure type
-definition, (a collection of) assignments to global variables. This separation
-of the input program is meant to allow multithreaded Parser operation.
-
-Each Token object contains 4 fields:
-    - a std::string_view into the input source string where the token appeared;
-    - Source line and column where the token appeared;
-    - The type of the token.
-
-The Lexer is itself represented with a class. That way, multiple Lexer objects
-can be spawned to process multiple input source files on multiple threads.
-The primary fields of each Lexer object are the std::vector of Token objects
-and one of Code_Block objects, along with the source code string. The other
-fields are auxilliary and aid in the lexing operation, like current_lexeme_len.
-Its only member function is what carries out the tokenizing of that Lexer's
-own source code string.
-
-
-3. Parser
+2. Lexing
 =========
 
-The parser constructs the AST of a given part of the input source program.
+The Lexer carries out the operation of turning the written source code program
+into an array of tokens. This is the primary output of the Lexer. It also has
+1 secondary output as a byproduct - the populated Code Block Directory, which is
+simply an array of entries, where each entry gives the starting and ending token
+indices and the type of each Code Block.
 
-The parsing operation is implemented in the following way:
+A Code Block is a building block of the source program, with its start and end
+designated with keywords. Examples of Code Blocks: the main source program block
+and definitions of functions and custom data types.
 
-A Parsing Orchestrator is spawned, one per source file. It uses the
-Auxilliary Code Block Directory populated by the Lexer to tell multiple parsers
-individually which Code Blocks of the Token Array of the input source program to
-parse and emit an AST and a Symbol Table of, which allows for efficient
-multithreaded parsing.
+Multithreaded compilation, when implemented later on, can be expressed elegantly
+as dividing the task of compiling N code blocks between X threads.
+
+Each Token object contains 4 fields:
+    - a std::string_view into the source code string where the token appeared;
+    - Source code line and column where the token appeared;
+    - The token's type.
+
+The Lexer is conceptually a device, so it's represented as a class, much like
+the Parser, the IR Generator and other entities that carry out operations.
+The Token Array and Code Block Directory get populated by the Lexer and passed
+on to the Parsing Orchestrator after lexing finishes.
+
+Token type can be readily deduced from the first character of a lexeme.
+All whitespace is ignored. No semantic analysis is performed during lexing.
+Minimal errors in the program are caught, namely unrecognized tokens and
+improper placement of code within Code Blocks.
+
+3. Parsing
+==========
+
+Parsing constructs the AST of a given input source program.
+
+A Parsing Orchestrator is spawned, one per source file. It uses the Code Block
+Directory populated by the Lexer to tell one or more Parsers individually which
+Code Blocks of the Token Array to parse. This allows for eventually implementing
+elegant multithreaded parsing. For the moment, it is singlethreaded.
+
+Byproducts of AST construction: The Statement Directory and Symbol Table.
 
 The Symbol Table is held in a C++ std::unordered_map, with the key being the
 actual token name string and the corresponding value being a Symbol object.
 Maintaining the Symbol Table in any sorted order is not needed, thus the C++
-unordered_map is better than an ordered STL map.
+std::unordered_map is better than an std::map.
 
-Symbols are represented as a class. Each Symbol object contains 3 things:
-    - The kind of Symbol this is;
+Symbols are represented as a class. Each Symbol object contains 4 things:
+
+    - The kind of Symbol this is (function name, variable name, etc)
     - The actual symbol name string;
-    - The type of the Symbol - a multi-bitfield uint64_t documented descriptor.
+    - The type of the Symbol. When functions and other primitive types exist,
+                              this will be a documented bitfield, with the first
+                              few bits giving us the type, any next bits giving
+                              us the function signature if it's a function.
+
+    - The symbol's IR mangle counter. This is used in the IR generation phase to
+                                      maintain Static Single Assignment form.
 
 The AST is held in a special memory arena of bytes. Each arena slot contains one
 AST Node, plus any byte offset its alignment requirements may have incurred.
-A special data structure called the Auxilliary Code Block Statement Directory
-contains the byte offset into the Arena of each source statement, aka of the
-root of each subtree, completing the whole AST structure.
+A special data structure called the Statement Directory contains the byte offset
+into the Arena of each source statement, aka of the root of each AST subtree,
+completing the whole AST structure.
 
 Each AST Node is represented by its own class. AST Nodes that can be of several
-types are repesented by one non-instantiable abstact base class and a derived
-concrete class for each of this Node's types. For example, Expression can be a
-binary_operation, a literal or a symbol.
-
-Each AST Node type has its own processor function which is called when that Node
-type is encountered in the Token Array. The language grammar is made to be
-unambiguous enough that the first token of any language construct (an assignment
-statement, a binary_operation on the right hand side of an assignment, etc)
-immediately tells the Parser what kind of AST Node this is and thus, which
-processor function to call, adding much needed simplicity to the design and
-implementation of AST construction.
-
+types are repesented by one non-instantiable abstact base class and ONE LAYER of
+derived concrete classes for each of this Node's types. For example, Expression
+can be a binary_operation, a literal or a symbol, etc.
 
 4. Semantic analysis & error reporting
 ======================================
 
 Lexing catches and reports basic syntax errors when an unknown symbol is seen,
-which is not part of the defined symbols in the language grammar.
+as well as whether each chunk of source code is within a Code Block.
 
-Parsing, during AST construction, catches all other syntax errors, such as
-missing parentheses and semicolons, plus basic semantic errors. For now, this
-only includes reporting a variable read before it has been initialized.
+AST construction catches all other syntax errors, such as missing parentheses
+and semicolons, plus basic semantic errors, like a read before initialization.
 
 A fully fledged semantic analysis pass doesn't exist, but likely will later on.
-
 
 5.  Source file contents summary for the Front End
 ==================================================
 
-src/frontend/
+src/compiler-phases/frontend/
 
     ============================================================================
     ============================================================================
-    1)  token.h    1.1) Lookup tables and named indices into them for all Code
-        -------         Block types, all language keywords, all token types.
-
-                   1.2) Class definitions for Token and Code_Block.
-
-                   LoC: 164
-    ============================================================================
-    ============================================================================
-    2) lexer.h     2.1) Class definition for Lexer.
+    1) lexer.h      1.1) Class definition for Lexer.
        -------
-                   2.2) Function definitions: Processor functions used by Lexer
-                                              on how to process each Token type.
+                    1.2) Function definitions: Processor functions used by the
+                                               Lexer to process each Token type.
 
-                   2.3) Function definition: The main Lexing operation itself.
+                    1.3) Function definition: The main Lexing operation itself.
 
-                   LoC: 400
+                    LoC: 352
     ============================================================================
     ============================================================================
-    3) ast.h       3.1) Named indices for each field of the tuples that are the
-       -----            entries of the Auxillary Code Block Statement Directory.
+    2) ast.h        2.1) Counters: total number of statement & expression kinds.
+       -----
+                    2.2) Lookup tables and named indices into them for all
+                         statement kinds and all expression kinds.
 
-                   3.2) Counters for total number of symbol kinds, statement
-                        kinds and expression kinds.
-
-                   3.3) Lookup tables and named indices into them for all Symbol
-                        kinds, all statement kinds and all expression kinds.
-
-                   3.4) Class definition for:
-                            - Symbol
+                    2.3) Class definition for:
                             - Expression: abstract class & concrete subclasses
-                            - Statement:  abstract class & concrete subclasses
+                            - Statement : abstract class & concrete subclasses
 
-                   LoC: 262
+                    LoC: 155
     ============================================================================
     ============================================================================
-    4) parser.h    4.1) Parameterized macros for:
-       --------             - Add symbol to ST if not found, get a pointer to it
-                            - Give error if symbol not in ST, or get a ptr to it
+    3) parser.h     3.1) Class definitions fo ParsingOrchestrator and Parser.
+       --------
+                    3.2) Function definition: Ochestator spawning a Praser.
 
-                   4.2) Class definitions fo ParsingOrchestrator and Parser.
-
-                   4.3) Function definition: Ochestator spawning a Praser.
-
-                   4.4) Function definitions for:
+                    3.3) Function definitions for:
                             - Top-level parsing of a Code Block's statements
                             - Top-level processor for any individual statement
                             - Processor to parse an assignment statement
                             - Processor to parse a binary operation
 
-                   LoC: 842
-    ============================================================================
-    ============================================================================
-    5) compiler-hirola.cpp
-       -------------------
-
-                   5.1) Includes for standard headers & project header files.
-
-                   5.2) Example Hirola programs held in std::strings.
-
-                   5.3) Instantiating Lexer & ParsingOrchestrator to tokenize
-                        and emit the AST of the given input program, using
-                        clock_gettime(CLOCK_MONOTONIC_RAW, &tv1);
-                        to see wall clock time taken of these two phases.
-
-                   5.4) A loop going over each created AST Node reconstructing
-                        the entire program from the AST successfully.
-
-                   LoC: 186
+                    LoC: 495
     ============================================================================
     ============================================================================
 
+src/compiler-data-structures/frontend/
+
+    ============================================================================
+    ============================================================================
+    4) front-end-structures.hpp
+       ------------------------
+
+                    4.1) Lookup table with named indices of token types and
+                         language keywords
+
+                    4.2) Class definitions: Token and Token Array
+
+                    4.3) Class definition : An entry in the Code Block Directory
+                    4.4) Class definition : The Code Block Directory
+
+                    4.5) Lookup table with named indices for symbol kinds
+
+                    4.6) Class definitions: Symbol and Symbol Table
+
+                    4.7) Class definition : An entry in the Statement Directory
+                    4.8) Class definition : The Statement Directory
+
+                    LoC: 457
+    ============================================================================
+    ============================================================================
+
+################################################################################
+################################################################################
 
 CHAPTER II: Hirola Compiler Middle End
 --------------------------------------------------------------------------------
 
-To be written when SSA IR generator is implemented.
+In the compiler middle end, the AST is taken as input and used to generate the
+SSA IR code. Similarly to parsing, an IR Generation Orchestrator is spawned per
+source file, using a quota (an array of Code Block indices) to spawn one or more
+IR Generators and tell them which parts of the AST to emit IR code for.
 
+Similarly to AST construction, the IR instructions go into a special memory
+arena, contiguously to boost spatial cache locality and speed up compilation.
+The arena byte offset to each IR Instruction is in the IR Instructions Directory
+which is the 1 byproduct structure of IR Generation.
+
+Each entry of the IR Instructions Directory contains 4 things:
+
+    - Memory arena offset of the IR Instruction's object;
+    - Which source code statement this IR Instruction was emitted for;
+    - Which Code Block this source statement was part of;
+
+    - Which IR instruction index this is, in the sequence of IR Instructions
+      emitted for this source statement, since a source code statement could
+      have multiple IR instructions emitted for it.
+
+Each IR Instruction is represented by its own class.
+
+Each variable's IR mangle counter in its Symbol object is used and incremented
+each time a reassignment to that variable is seen when going source statement
+by source statement and emitting IR code for each one. For instance, a variable
+called my_var which, after its first initializing assignment, is assigned to
+2 more times, will appear as %my_var_1, %my_var_2, %my_var_3 in the emitted IR
+code. Nested binary operations are stored in auxilliary IR constants called
+%const_X, where X is simply how many we've had to use so far.
+
+Since the IR code is in Static Single Assignment form, it lends itself nicely
+to many compiler optimizations, such as Loop-invariant code motion, common
+subexpression elimination, constant propagation and others. None have been
+implemented at present, it's a future effort.
+
+-----------------------------------------------------------
+Example of a piece of emitted SSA IR code:
+
+Reconstructing the source program from the AST:
+
+a = 5
+b = 0
+c = 9444
+c = a
+a = 7
+b = a
+d = c
+c = (a + 5)
+a = (a + b)
+a = (((10 + d) / (a * c)) + (a - 77))
+
+IR Generator: End of Statement Directory was reached.
+[OK] IR Generator finished its work quota.
+     Source statements IR code was emitted for: 10
+
+  ****  IR generation successful!  ****
+
+IR Instructions emitted: 20
+IR Arena bytes used: 1504
+%const_0 = 5
+%a_1 = %const_0
+%const_1 = 0
+%b_1 = %const_1
+%const_2 = 9444
+%c_1 = %const_2
+%c_2 = %a_1
+%const_3 = 7
+%a_2 = %const_3
+%b_2 = %a_2
+%d_1 = %c_2
+%c_3 = %a_2 + %const_0
+%a_3 = %a_2 + %b_2
+%const_4 = 10
+%_temp_0 = %const_4 + %d_1
+%_temp_1 = %a_3 * %c_3
+%_temp_2 = %_temp_0 / %_temp_1
+%const_5 = 77
+%_temp_3 = %a_3 - %const_5
+%a_4 = %_temp_2 + %_temp_3
+-----------------------------------------------------------
+
+Source file contents summary for the Middle End
+===============================================
+
+src/compiler-phases/middle-end/
+
+    ============================================================================
+    ============================================================================
+    1) ir-instructions.hpp
+       -------------------
+
+                    1.1) Class definitions: Available IR Instructions
+
+                    LoC: 106
+    ============================================================================
+    ============================================================================
+    2) ir-generator.hpp
+       ----------------
+
+                    2.1) Class definition: IR Generation Orchestrator
+                    2.2) Class definition: IR Generator
+
+                    2.3) Function definition: IR Generation Orchestrator
+                                              spawning an IR Generator.
+
+                    2.4) Function definition: Top-level IR generation
+                                              dispatching function going over
+                                              the given IR generation quota.
+
+                    2.5) Function definitions: The operations of emitting IR
+                                               for language constructs such as
+                                               a nested binary operation, an
+                                               assignment statement, etc.
+
+                    2.6) Function definitions: Functions that actually emit
+                                               each available IR instruction
+                                               when the higher level IR emitting
+                                               functions have decided to do so.
+
+
+                    LoC: 774
+    ============================================================================
+    ============================================================================
+
+src/compiler-data-structures/
+
+    ============================================================================
+    ============================================================================
+    3) middle-end-structures.hpp
+       -------------------------
+
+        3.1) Lookup table with named indices of all available IR Instructions.
+        3.2) Class definition: A single entry in the IR Instructions Directory
+        3.3) Class definition: The IR Instructions Directory
+
+################################################################################
+################################################################################
 
 Chapter III: Hirola Compiler Back End
 --------------------------------------------------------------------------------
 
-To be written when x86_64 assembly code generator and final executable file
-emitting are implemented.
+To be written when x86_64 and/or aarch64 assembly code generation and final
+executable file output operations are implemented.
+
+################################################################################
+################################################################################
+
+Chapter IV. Custom data structures implemented for the compiler
+--------------------------------------------------------------------------------
+
+In this chapter we go over the special hand-written C++ data structures used by
+the compiler implementation.
+
+Quick overview:
+---------------
+
+There is currently 1 special data structure used across compiler phases:
+
+    - Custom memory arena
+
+1. Custom Memory Arena
+----------------------
+
+This is simply a byte buffer wherein different-sized, but related, objects ought
+to be populated. The aim is to boost spatial cache locality, thus speeding up
+compilation itself.
+
+Examples where it's used: To store the AST Nodes, as well as to store each
+                          emitted IR instruction for a given source program.
+
+The alternative, for the AST Nodes, would be to let each AST Node be in its own
+small heap-allocated chunk, which is what std::map does in C++. This could more
+inefficiently make use of modern CPU microarchitecture, as the hardware prefetch
+machinery in modern CPUs assumes that nearby memory locations (nearby cache
+lines, to be precise) are likely to be required, and recognizes memory access
+patterns such as quick accesses to cache lines N, N+1, N+2 and automatically
+starts prefetching the contents of the following cache lines into the hardware
+caches, so that when you do need their contents, they are already sitting in
+the cache, saving you cycles you would have otherwise spent waiting for this
+data to arrive from RAM, which is much slower than fetching the data from cache.
+
+C++ templates were used to implement the add_entry function for the arena. A
+template type T generalized the new entry's type, and a variadic template is
+used to generalize on the arity and types of arguments given, which are to be
+passed to the constructor of the newly added arena entry.
+
+Source file contents summary for the Custom Memory Arena
+========================================================
+
+src/compiler-data-structures/custom-data-structures/
+
+    ============================================================================
+    ============================================================================
+    1) custom-mem-arena.hpp
+       --------------------
+
+                        1.1) Class definition: The custom memory arena
+
+################################################################################
+################################################################################
