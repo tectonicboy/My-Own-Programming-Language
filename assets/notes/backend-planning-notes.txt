@@ -1,0 +1,105 @@
+The first thing to make appearance in the compiler backend will be what's called
+a Machine Description. What it contains is imperative to having correct compiler
+backend phases, 1 machine description per target CPU we emit assembly code for.
+
+For now we won't have separate machine descriptions or parts of descriptions for
+individual models/generations of the same architecture. We will simply have one
+generic machine description for aarch64 and one for x86_64, based on a single
+particular grecent eneration, since next-gen CPUs are backwards compatible.
+
+After researching which recent intel CPU microarchitecture had the biggest
+changes, and which ones had more insignificant changes, it turns out that the
+Golden Cove CPU microarchitecture is a good base to describe and emit assembly
+code for, when targetting x86_64. Alder Lake 12th generation Intel Core CPUs
+by Intel are utilizing this microarch. Raptor Lake CPUs utilize Raptor Cove,
+which is basically Golden Cove but with.
+
+Raptor Cove:
+
+    - Boosted frequency up to 6.2 GHz
+    - 2 MB L2 cache, up from 1.25 MB on mainstream desktop CPU variants.
+    - New dynamic prefetch algorithm.
+
+Everything else stays the same as Golden Cove - execution ports, decoders,
+supported ISA extensions and instructions, ROB size, uOP Cache size.
+
+Golden Cove:
+
+    - 6-wide partial insn decoder, fetching up to 32 bytes of insns per cycle.
+    - 6-wide microarchitecture but removed complex decoder.
+    - uOP cache is 4000 entries now, up from 2250 in sunny cove.
+    - 12 execution ports, up from 10 in sunny cove.
+    - 512 Reorder Buffer entries, up from 352 - larger OoO instruction window.
+    - 332 vector/ploating-point register file, up from 224 in sunny cove.
+    - 192 Load, 114 Store queues, up from 128 and 72 in sunny cove.
+    - 1.25 MB per core L2 cache (Raptor Lake is 2MB) on desktop CPU variants.
+    - L3 all-core shared cache size is num_mores * 3MB.
+    - Dedicated floating point adders
+    - New instruction set extensions:
+        - PTWRITE
+        - User-mode wait (WAITPKG): TPAUSE, UMONITOR, UMWAIT
+        - Architectural last branch records (LBRs)
+        - Hypervisor-managed linear address translation (HLAT)
+        - SERIALIZE
+        - Enhanced Hardware Feedback Interface (EHFI) and HRESET
+        - AVX-VNNI
+        - AVX-512 with AVX512-FP16
+
+IMPORTANT: These descriptions are for DESKTOP variants, not server variants.
+
+These details are irrelevant to the base x86_64 machine descroption, because
+we want to generate assembly code that can run on many machines, using a small
+base machine description, and then optimize that code with further optimization
+passes against a given Specialized Machine Description to optimize against the
+uArch details of, say, Golden Cove.
+
+The Base Machine Description will only contain things that are the same across
+ALL updates to the microarchitecture:
+
+    - General purpose registers availability
+    - ABI details, like calling convention register usage
+    - Subset of widely available assembly instructions.
+
+The assembly codegen phases look like this:
+
+1. Instruction Selection
+------------------------
+
+Pattern match which IR code patterns match to which assembly code patterns.
+This could be a simple 1 to 1 mapping of IR to assembly, or it could get more
+involved, with things like LEA being used for multiplications by 3, 5 and 9.
+
+Registers are assumed to be infinite.
+
+2. Register Allocation
+----------------------
+
+This phase makes the emitted assembly code go from infinite virtual registers
+to actually using real architectural registers like RAX, RBX, RCX, etc.
+
+It can be a very simple "spill to stack immediately" register allocator, so that
+you basically always have all registers available, use as many as needed, then
+immediately store the result in memory and reload it into registers when needed.
+
+It can later be Chaitin-Briggs with proper graph coloring and stuff.
+
+3. Instruction Scheduling
+-------------------------
+
+See if you can reorder instructions to extract more instruction-level
+parallelism, given the target CPU's microarchitectural properties described in
+the Specialized Machine Description for that particular uArch.
+
+4. Assembly code optimizations
+------------------------------
+
+Things like peephole where you take a window of, say, 3 instructions, see if
+you can rewrite that in a more efficient way using different instructions,
+and slide the window down.
+
+PLAN: For the time being, only have the simplest possible backend:
+
+- A basic machine description for x86_64 and aarch64.
+- No specialized machine descriptions and passes that use them yet.
+- Instruction Selection based on the Basic Machine Description.
+- Simplest possible register allocation scheme with use-and-spill registers.
