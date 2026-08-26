@@ -1,6 +1,9 @@
 The first thing to make appearance in the compiler backend will be what's called
 a Machine Description. What it contains is imperative to having correct compiler
-backend phases, 1 machine description per target CPU we emit assembly code for.
+backend phases.
+
+Two terms will be used in the compiler backend - Basic Machine Description and
+Special Machine Description. A Basic Machine Description
 
 For now we won't have separate machine descriptions or parts of descriptions for
 individual models/generations of the same architecture. We will simply have one
@@ -103,3 +106,137 @@ PLAN: For the time being, only have the simplest possible backend:
 - No specialized machine descriptions and passes that use them yet.
 - Instruction Selection based on the Basic Machine Description.
 - Simplest possible register allocation scheme with use-and-spill registers.
+
+
+Assembly programming notes - Function calls & stack frame behaviour.
+====================================================================
+The only instruction that accepts 64-bit immediates is mov, variant:
+
+MOV r64, imm64
+
+add, sub, etc, accept 32-bit immediates only, this allows instructions to not
+bloat up in size and take up excessive icache space.
+
+Normally, RBP and RSP registers are used to manage the stack frames of called
+functions. RBP is available to be used as a general purpose register (GPR),
+though. RSP is NOT available to be used as a GPR - it is edited automatically
+by the CPU when executing instructions PUSH, POP, CALL, RET.
+
+RBP traditioanlly points to the START of the current stack frame, remaining
+static for the duration of the current function call (until the current function
+calls another function, or returns to its caller). THe stack itself grows
+downwards toward more negative addresses. That's why we SUBTRACT values from
+RSP when we allocate new automatic variables on the current stack frame or for
+any other things we place on the stack.
+
+Two ways of accessing the stack slot of an automatic function-local variable:
+    - RBP minus stack offset  --  we won't be doing this, RBP optimized away.
+    - RSP plus stack offset   --  YES.
+
+NOTE: The Hirola compiler optimizes RBP away completely, letting it be used
+      as an extra register always by default.
+
+RIP register is the program counter / instruction pointer, it stores the virtual
+address of the instruction that the CPU is to execute next. RIP register is
+automatically edited by the CPU after instructions like CALL, RET, JMP, JE, etc.
+
+-----------------------------------------------------------
+
+DO NOT GET CONFUSED by how variables are pointed to! Assuming memory is growing
+left to right, stack growth and RSP pointing to variables is illustrated with:
+
+stack
+growth
+direction      <----------- var_1 ----------->  <----------- var_2 ----------->
+
+<-----   TOP   [b1][b2][b3][b4]b5][b6][b7][b8]  [b1][b2][b3][b4][b5][b6][b7][b8]
+
+RSP is pointing to byte b1 of var_1, so:
+
+sub rsp, 8
+
+moves the stack pointer to the (read left to right) first byte of
+the new variable, so now we can populate that new empty 8-byte stack slot:
+
+mov rcx, 1455
+mov [rsp], rcx
+
+-----------------------------------------------------------
+
+ABI RULES TO IMPLEMENT CONFORMANCE TO in my compiler:
+
+1. Before a CALL instruction is executed, RSP must be divisible by 16.
+
+   NOTES: When the OS spawns our process, it guarantees that our RSP starting
+          value is aligned to 16 bytes correctly. So the compiler simply has
+          to track how many bytes it has moved RSP by, and if a CALL instruction
+          is to be emitted, before emitting it check the current counter of
+          total stack allocated bytes, calculate padding bytes, eg. 12, and:
+
+          sub rsp, 12
+          CALL my_func_label
+
+2. SYS V ABI states that the first 6 integer/pointer arguments are passed via
+   the registers:
+
+   ARGUMENT PASSING REGISTERS:  RDI, RSI, RDX, RCX, R8, R9
+
+   CALLER SAVES these registers before placing the function arguments in them.
+   Further arguments get pushed on the stack BY THE CALLER prior the CALL insn.
+
+3. Functions return their result in RAX, so caller should save it before CALL.
+
+4. Callee-saved registers: RBX, RSP, RBP, R12, R13, R14, R15
+
+   Everything else, if containing useful stuff, should be saved BY THE CALLER,
+   including all RAX, XMM, all YMM, all ZMM registers.
+
+   Thus, each register will need a bit in a bitmask, indicating whether it needs
+   to be saved right before a CALL instruction must be emitted.
+
+
+COMPILER BACKEND IMPLEMENTATION NOTES
+=====================================
+
+Register RBP will not be used by Hirola emitted assembly. RSP will be used
+to manage automatic function-local stack variables.
+
+Positive offsets from RSP, in [ ] for intel asm syntax, let us access stack
+variables. push instruction automatically bumps RSP's value to allocate more
+stack space. RSP always points to the END of the stack, aka to the first empty
+byte after the stack region, which grows toward more negative addresses.
+
+;Add the constant 5 onto the stack as a 64-bit variable:
+mov rax, 5
+push rax
+
+;Access it and place it in rcx register, assuming nothing else has been pushed
+;onto the stack in the mean time:
+mov rcx, [rsp+4]
+
+Dynamic offset: Upfront stack space for a function is one thing, but if the
+                instruction selection phase decides to push something else
+                on the stack in the middle of the function's operation, this
+                means the remembered offsets from RSP to each variable are now
+                different, in case they have to be accessed after the new thing
+                was pushed on the stack.
+
+                Not even sure this will be needed right now in the beginning
+                phases of the compiler backend.
+
+                There is extra stack pushing right before a CALL instruction,
+                but these things get restored to their original registers
+                right after the CALL instruction, so we don't have to update
+                any offsets for the caller's variables.
+
+Since all function-local storage is always known at compile time in Hirola,
+no dynamic stack allocation with alloca() or variable-size stack arrays, the
+offset from RSP of every single variable IS COMPUTABLE AT COMPILE TIME and
+remains constant while the function's operation is carried out.
+
+This means the compiler can save each IR variable's offset from RSP in a size_t.
+
+Total stack space needed for each function (return address, non-reg arguments,
+automatic stack variables, etc) is also known at compile time, which means the
+compiler can simply save it in a size_t for each function, but idk if it's even
+needed since POP returns RSP to what it was before the CALL instruction.
