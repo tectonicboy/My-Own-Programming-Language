@@ -1,3 +1,8 @@
+################################################################################
+################################################################################
+August 26 2026:
+--------------
+
 The first thing to make appearance in the compiler backend will be what's called
 a Machine Description. What it contains is imperative to having correct compiler
 backend phases.
@@ -240,3 +245,187 @@ Total stack space needed for each function (return address, non-reg arguments,
 automatic stack variables, etc) is also known at compile time, which means the
 compiler can simply save it in a size_t for each function, but idk if it's even
 needed since POP returns RSP to what it was before the CALL instruction.
+
+################################################################################
+################################################################################
+August 31 2026:
+--------------
+
+Finalized compiler backend design and implementation notes.
+----------------------------------------------------------
+
+Each CPU architecture gets one Basic Machine Description and multiple Special
+Machine Descriptions. The Basic one contains just enough information about an
+architecture to enable the compiler to construct correct mappings from IR code
+to Assembly code, via pattern matching, thus emitting correct assembly language
+programs that are able to run on a vast number of CPUs. The IR->ASM patterns are
+defined in the Instruction Selection part of the compiler backend. Specialized
+machine descriptions contain details that change from generation to generation
+of an architecture family, such as uOP cache size, newer assembly instructions,
+etc, thus allowing for CPU model-specific optimization.
+
+Only a Basic Machine Description will be implemented for x86_64 to start with.
+
+Basic Machine Descriptions contain:
+
+    I.  A lookup table with named indices of basic assembly instruction names.
+        --------------
+
+    II. A lookup table with named indices of basic architectural register names.
+        --------------
+        For x64 this will contain not only the general purpose machine word size
+        registers like RAX, RDI, etc, but also XMM registers, as XMM0 is used
+        to return floating-point values as part of the Linux calling convention!
+
+    III. Class: Assembly_Instruction. Contains:
+         ----------------------------
+        - Index into assembly instructions lookup table.
+        - Arity of operands.
+        - Compile-time constexpr array of N Operand objects. N = 4 for x86_64.
+        - Member function to emit a proper assembly language instruction string.
+
+    IV. Class: ASM_Instruction_Operand. Contains:
+        -------------------------------
+        - uint8_t: operand type.
+            = 0: Immediate  x1
+            = 1: Register   x1
+            = 2: [Register] x1, as pointer deref.
+            = 3: [Reg + Offset_Immediate], as pointer deref.
+
+            = 4: [Reg1_base_addr * Reg2_elem_index + size_immed + offset_immed]
+                 as pointer deref. This is accessing array elements, possibly
+                 for arrays of composite/custom types.
+
+            = 5: String x1  --  This is for things like "jne my_label".
+
+        - uint8_t: REG1_index into the registers lookup table.
+        - uint8_t: REG2_index into the registers lookup table.
+        - size_t : immediate_value_1
+        - size_t : immediate_value_2
+
+        These 4 in a UNION with:
+
+        - std::string_view: string operand. For instance  --  jne my_label.
+
+    V. ABI rules.
+       ----------
+       These are the Application Binary Interface conventions. They will be
+       described concisely in a comment block in each basic machine description,
+       and in full in the project documentation for the compiler backend.
+
+       In addition to obviously being present in compiler code that implements
+       conformance to the ABI rules, such as selecting which function argument
+       to go into which register, the ABI Rules section of a machine description
+       will contain the following items:
+
+       - uint8_t: Arity of function arguments that get passed in registers.
+                  For x64:
+                  integers/pointers, this is 6  --  rdi, rsi, rdx, rcx, r8, r9.
+                  floating-points,   this is 8  --  xmm0 - xmm7.
+
+                  So have 2 arity uint8_t's, one being 6, the other being 8.
+
+       - A compile-time constexpr array of indices into the register lookup
+         table indicating exactly which registers to be used when passing the
+         first function arguments.
+
+       - Comment block: A compact description of all implemented ABI rules.
+
+       - uint8_t: Register index for int and pointer return values. x64: RAX.
+
+       - uint8_t: Index of register 1 if returning 128-bit results (RAX in x64.)
+       - uint8_t: Index of register 2 if returning 128-bit results (RDX in x64.)
+
+       - uint8_t: Register index if returning floating-point values. x64: XMM0.
+
+       - uint8_t: Register indices for returning large structs.
+
+                  Full rule:
+
+                  Caller allocates space in advance for this struct and passes
+                  a pointer to that memory as a HIDDEN FIRST ARGUMENT in rdi.
+
+                  Callee writes the resulting struct contents to that memory via
+                  the passed pointer in rdi AND RETURNS THAT POINTER IN RAX.
+
+       - A compile-time constexpr array of indices into the register lookup
+         table indicating all callee-saves registers.
+
+         For x64 linux: rbx, rbp, r12, r13, r14, r15.
+
+         Epilogue of each function restores register rsp.
+         Prologue of each function allocates known stack space with it.
+
+         Note: even though rbp is not used to handle stack frames, but rather
+               optimized away and made available as a general purpose register,
+               it still needs to be saved by the callee and restored at its end.
+
+       - A compile-time constexpr array of indices into the register lookup
+         table indicating all caller-saves registers. This is the same set of
+         registers as the set that can freely be used in assembly instructions.
+         RBP register is freed up for this purpose, remember, as stack frames
+         will only be managed using register rsp.
+
+         For x64 linux: - rax, rcx, rdx, rsi, rdi, r8, r9, r10, r11.
+                        - all xmm/ymm/zmm registers
+                        - A few specific status flags in RFLAGS register can
+                          freely be used by functions, as they are caller-saved.
+
+       - size_t: stack alignment bytes.
+
+         A special number that RSP must be divisible by, before a CALL
+         instruction is executed. This is 16 in x64 linux. When the OS spawns
+         our process, it gives us a guarantee that RSP starts out as divisible
+         by 16. We just have to "sub rsp, X" before each CALL if RSP is not
+         properly aligned by 16 due to whatever was placed on the stack.
+
+         So basically:
+
+         Before a CALL, rsp % 16 == 0.  --  "sub rsp, X" if needed.
+         ------
+
+         After a CALL, rsp % 16 == 8. Because the return address is placed
+         -----                        on the stack automatically by CALL insn.
+
+    VI. size_t: The size of the target machine word. In x64 this is 8 bytes.
+                    -------------------------------
+
+That should do it, for a basic machine description.
+
+Then, in Instruction Selection code, we will have precise specified mappings
+of which IR instruction, or collection of IR instructions, should map to
+what assembly instruction(s).
+
+The actual act of selecting instructions, their operands and registers will
+be written in code as selected named indices into the lookup tables and
+constructed objects of classes Assembly_Instruction and ASM_Instruction_Operand.
+
+The emitted assembly language program will be internally stored much like the
+emitted IR program: inside its own memory arena, plus ASM_Instructions_Directory
+that contains, in each entry, stuff like:
+
+    - The byte offset of the ASM instruction into the ASM_Instructions_Arena
+
+    - Which IR instruction index was this ASM instruction emitted for?
+
+    - Which assembly instruction index, in order, is this for the current IR
+      instruction we are emitting assembly code for?
+
+Finally, once the IR_Instructions_Arena and Directory are fully populated with
+a correct assembly language program representation, we use the string dumping
+member of the Assembly_Instruction class on each ASM instruction object in the
+memory arena to emit the final assembly language program.
+
+The emitted assembly language program will go through NASM and ld, in order to
+emit the final executable program.
+
+Lastly, the exit code of the program must be specified. I will either let it
+simply take the last IR variable that was written to, or go a little further
+and add a special rule in the language that precisely defines how to get the
+Hirola program to have the exit code that the user wants, for example a special
+variable called PROG_EXIT_CODE that internally defaults to 0, or, if assigned to
+in the Hirola source code, is whatever value the programmer gave it, and is
+always what's used as the final program exit code. To fully implement this, the
+mangle counter may need to be used.
+
+
