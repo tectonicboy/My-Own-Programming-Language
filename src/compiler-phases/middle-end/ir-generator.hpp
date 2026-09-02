@@ -5,7 +5,6 @@
  */
 class IR_Generation_Orchestrator
 {
-
 public:
     /* Receives these from a Parsing_Orchestrator: */
     MEM_Arena ast_arena;
@@ -18,7 +17,7 @@ public:
     /* Receives this from the top-level compilation driver: */
     std::vector<std::vector<size_t>> IR_generation_quotas;
 
-    /* Constructor */
+    /* Constructor. */
     explicit IR_Generation_Orchestrator
         (MEM_Arena&& ast_arena_in,
          Statement_Directory&& statement_dir_in,

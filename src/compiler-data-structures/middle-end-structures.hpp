@@ -38,14 +38,13 @@ public:
 
     /* Constructor */
     explicit IR_Instructions_Directory_Entry
-        (size_t code_block_ix_in, size_t statement_ix_in,
-         size_t ir_insn_ix_in,    size_t ir_insn_arena_offset_in,
-         size_t which_ir_insn_in)
+        (size_t code_block_ix_in, size_t statement_ix_in, size_t ir_insn_ix_in,
+         size_t ir_insn_arena_offset_in, size_t which_ir_insn_in)
     : code_block_ix(code_block_ix_in), statement_ix(statement_ix_in),
       ir_insn_ix(ir_insn_ix_in), ir_insn_arena_offset(ir_insn_arena_offset_in),
       which_ir_instruction(which_ir_insn_in) {}
 
-    void print_entry(void)
+    void print_entry(void) const
     {
         std::cout << "Code Block          : " << code_block_ix        << "\n"
                   << "Statement           : " << statement_ix         << "\n"
@@ -93,7 +92,7 @@ public:
     /* Move constructor.
      *
      * Used when passing ownership of the IR Instructions Directory from the
-     * Parsing Orchestrator to the IR Generation Orchestrator.
+     * IR Generation Orchestrator to the Assembly Generation Orchestrator.
      */
     IR_Instructions_Directory(IR_Instructions_Directory&& old_dir)
     : initial_capacity(old_dir.initial_capacity),
