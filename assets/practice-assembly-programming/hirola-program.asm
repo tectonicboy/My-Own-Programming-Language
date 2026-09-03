@@ -93,7 +93,7 @@ _start:
     ; %_temp_1 = %a_3 * %c_3
     mov     rax, [rbp-104]          ; a_3
     mov     rcx, [rbp-96]           ; c_3
-    imul    rax, rcx
+    mul     rax, rcx
     mov     [rbp-128], rax          ; _temp_1
 
     ; %_temp_2 = %_temp_0 / %_temp_1

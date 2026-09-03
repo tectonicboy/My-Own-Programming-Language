@@ -86,32 +86,66 @@ private:
      * STEPS:
      *
      * 1. Store the literal in register rbp.    |  mov rbp, 5
-     * 3. Store register rbp in [rsp + offset]. |  mov [rsp], rbp
+     * 2. Store register rbp in [rsp + offset]. |  mov [rsp], rbp
      *--------------------------------------------------------------------------
-     *
-     *==========================================================================
-     *==========================================================================
      *
      * Pattern 2:   { %a_1 = %const_0 }   --->   IR_Variable_1 = IR_Variable_2.
      *
      * STEPS:
      *
-     * 1. Store var_2 in rbp from stack offset.  | mov rbp, [rsp + offset2]
-     * 3. Store register rbp in its stack slot.  | mov [rsp + offset1], rbp
+     * 1. Store var_2 in rbp from stack offset.  |  mov rbp, [rsp + offset2]
+     * 2. Store register rbp in its stack slot.  |  mov [rsp + offset1], rbp
      *--------------------------------------------------------------------------
      *
      * Pattern 3:   { %c_3 = %a_2 + %const_0 } ---> IR_var1 = IR_var2 + IR_var3.
      *
      * STEPS:
      *
-     * 1. Store var2 in rbp from its stack offset.   | mov rbp, [rsp + offset2]
-     * 2. Store var3 in rbx from its stack offset.   | mov rbx, [rsp + offset3]
-     * 3. Add rbx into rbp.                          | add rbp, rbx
-     * 4. Store register rbp in var1's stack offset. | mov [rsp + offset1], rbp
+     * 1. Store var2 in rbp from its stack offset.   |  mov rbp, [rsp + offset2]
+     * 2. Store var3 in rbx from its stack offset.   |  mov rbx, [rsp + offset3]
+     * 3. Add rbx into rbp.                          |  add rbp, rbx
+     * 4. Store register rbp in var1's stack offset. |  mov [rsp + offset1], rbp
      *--------------------------------------------------------------------------
      *
+     * Pattern 4:   { %_temp_1 = %a_2 - %a_3 } ---> IR_var1 = IR_var2 - IR_var3
+     *
+     * 1. Store var2 in rbp from its stack offset.   |  mov rbp, [rsp + offset2]
+     * 2. Store var3 in rbx from its stack offset.   |  mov rbx, [rsp + offset3]
+     * 3. Subtract rbx from rbp, put result in rbp.  |  sub rbp, rbx
+     * 4. Store register rbp in var1's stack offset. |  mov [rsp + offset1], rbp
+     *--------------------------------------------------------------------------
+     *
+     * Pattern 5:   { %_temp_1 = %a_2 * %a_3 } ---> IR_var1 = IR_var2 * IR_var3
+     *
+     * 1. Store var2 in rbp from its stack offset.   |  mov rbp, [rsp + offset2]
+     * 2. Store var3 in rax from its stack offset.   |  mov rax, [rsp + offset3]
+     * 3. Multiply. RAX * Operand2 = RDX:RAX <-- low |  mul rax, rbp
+     * 4. Store register rax in var1's stack offset. |  mov [rsp + offset1], rax
+     *--------------------------------------------------------------------------
+     * NOTE: This is UNSIGNED multiplication. If the result needs to use more
+     *       than 64 bits, the higher bits go to RDX and the overflowed low bits
+     *       are in RAX. The first operand is always RAX, second one - we pick.
+     *--------------------------------------------------------------------------
+     *
+     * Pattern 6:   { %_temp_1 = %a_2 / %a_3 } ---> IR_var1 = IR_var2 / IR_var3
+     *
+     * 1. Store var2 in RAX from its stack offset.    | mov rax, [rsp + offset2]
+     * 2. Sign-extend RAX into RDX to run division.   | cqo
+     * 3. Store var3 in rbp from its stack offset.    | mov rbp, [rsp + offset3]
+     * 4. Divide RDX:RAX / Operand2 = RDX:RAX <-- low | div rbp
+     * 5. Store register rax in var1's stack offset.  | mov [rsp + offset1], rax
+     *--------------------------------------------------------------------------
+     * NOTE: This is UNSIGNED division. The quotient goes in RAX, the remainder
+     *       goes in RDX, which is why we sign-extend RAX into RDX beforehand.
+     *       What we divide is in RAX. What we divide by is in a register or a
+     *       memory location of our choosing.
+     *--------------------------------------------------------------------------
      */
-
+    void emit_asm_for_equ_u64(size_t IR_dir_entry, size_t IR_insn_arena_offset);
+    void emit_asm_for_add_u64(size_t IR_dir_entry, size_t IR_insn_arena_offset);
+    void emit_asm_for_sub_u64(size_t IR_dir_entry, size_t IR_insn_arena_offset);
+    void emit_asm_for_mul_u64(size_t IR_dir_entry, size_t IR_insn_arena_offset);
+    void emit_asm_for_div_u64(size_t IR_dir_entry, size_t IR_insn_arena_offset);
 };
 
 void ASM_Code_Generator_x64::setup_new_stack_frame(void)
@@ -134,7 +168,7 @@ void ASM_Code_Generator_x64::setup_new_stack_frame(void)
     /* For each IR instruction that assigns to a new SSA IR variable:
      *   - Go over all IR variables already present on a stack frame slot,
      *     increase their offset from RSP by 8.
-     *   - New IR variable's offset from RSP is current TOTAL_STACK_ALLOCATED.
+     *   - New IR variable's offset from RSP is 0.
      *   - Add 8 to TOTAL_STACK_ALLOCATED.
      */
     for(size_t i = 0; i < IR_instructions_dir->size(); ++i)
@@ -181,3 +215,9 @@ void ASM_Code_Generator_x64::setup_new_stack_frame(void)
     }
     return;
 }
+
+void ASM_Code_Generator_x64::emit_asm_for_equ_u64(size_t IR_dir_entry, size_t IR_insn_arena_offset);
+    void emit_asm_for_add_u64(size_t IR_dir_entry, size_t IR_insn_arena_offset);
+    void emit_asm_for_sub_u64(size_t IR_dir_entry, size_t IR_insn_arena_offset);
+    void emit_asm_for_mul_u64(size_t IR_dir_entry, size_t IR_insn_arena_offset);
+    void emit_asm_for_div_u64(size_t IR_dir_entry, size_t IR_insn_arena_offset);
