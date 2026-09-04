@@ -220,7 +220,7 @@ constexpr size_t x64_operand_type_label                     = 5;
 class x64_ASM_Instruction_Operand
 {
 public:
-    uint8_t operand_type;
+    size_t operand_type;
 
     uint8_t operand_reg1_ix;
     uint8_t operand_reg2_ix;
@@ -230,7 +230,7 @@ public:
 
     /* Constructor. */
     explicit x64_ASM_Instruction_Operand
-        (uint8_t type_in, uint8_t reg1_ix_in, uint8_t reg2_ix_in,
+        (size_t type_in, uint8_t reg1_ix_in, uint8_t reg2_ix_in,
          size_t immediate1_val_in, size_t immediate2_val_in, std::string str_in)
     : operand_type(type_in), operand_reg1_ix(reg1_ix_in),
       operand_reg2_ix(reg2_ix_in), operand_immediate1_val(immediate1_val_in),
