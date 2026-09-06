@@ -25,7 +25,7 @@
 
 /* Lookup table with named indices of basic x64 assembly instruction names. */
 
-constexpr size_t x64_basicMD_supported_asm_insns_arity = 6;
+constexpr size_t x64_basicMD_supported_asm_insns_arity = 7;
 
 constexpr size_t x64_insn_mov_ix     = 0;
 constexpr size_t x64_insn_add_ix     = 1;
@@ -33,6 +33,7 @@ constexpr size_t x64_insn_sub_ix     = 2;
 constexpr size_t x64_insn_mul_ix     = 3;
 constexpr size_t x64_insn_div_ix     = 4;
 constexpr size_t x64_insn_syscall_ix = 5;
+constexpr size_t x64_insn_cqo_ix     = 6;
 
 constexpr std::array<const char*, x64_basicMD_supported_asm_insns_arity>
 lookup_table_x64_insn_names =
@@ -42,7 +43,8 @@ lookup_table_x64_insn_names =
     "sub",
     "mul",
     "div",
-    "syscall"
+    "syscall",
+    "cqo"
 };
 
 /*----------------------------------------------------------------------------*/
@@ -221,16 +223,15 @@ class x64_ASM_Instruction_Operand
 {
 public:
     size_t operand_type;
-
-    uint8_t operand_reg1_ix;
-    uint8_t operand_reg2_ix;
-    size_t  operand_immediate1_val;
-    size_t  operand_immediate2_val;
+    size_t operand_reg1_ix;
+    size_t operand_reg2_ix;
+    size_t operand_immediate1_val;
+    size_t operand_immediate2_val;
     std::string_view operand_label;
 
     /* Constructor. */
     explicit x64_ASM_Instruction_Operand
-        (size_t type_in, uint8_t reg1_ix_in, uint8_t reg2_ix_in,
+        (size_t type_in, size_t reg1_ix_in, size_t reg2_ix_in,
          size_t immediate1_val_in, size_t immediate2_val_in, std::string str_in)
     : operand_type(type_in), operand_reg1_ix(reg1_ix_in),
       operand_reg2_ix(reg2_ix_in), operand_immediate1_val(immediate1_val_in),
