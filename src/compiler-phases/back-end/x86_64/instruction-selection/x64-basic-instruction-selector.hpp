@@ -144,12 +144,12 @@ void ASM_Code_Generator_x64::setup_new_stack_frame(void)
         {
             curr_func_total_stack_allocated += 8;
 
-            std::cout << "Stack allocator: i = " << i << "\n";
+            //std::cout << "Stack allocator: i = " << i << "\n";
 
             for(auto& it: IR_vars_stack_offsets)
             {
                 it.second += 8;
-                std:: cout << "Add 8: " << it.first << " " << it.second << "\n";
+                //std:: cout << "Add 8: " << it.first << " " << it.second << "\n";
             }
 
             if(IR_insn_type == IR_INSN_EQUATE)
@@ -223,12 +223,15 @@ uint8_t ASM_Code_Generator_x64::generate_ASM_code(void)
      *       Temporarily, for now, it will do though.
      */
     arena_offset = x64_ASM_instructions_arena->add_entry
-                       <x64_Assembly_Instruction>(x64_insn_sub_ix, 1);
+                       <x64_Assembly_Instruction>(x64_insn_sub_ix, 2);
 
     asm_insn = (x64_Assembly_Instruction*)
                    (x64_ASM_instructions_arena->arena_ptr + arena_offset);
 
     asm_insn->insn_operands[0] = x64_ASM_Instruction_Operand
+                            (x64_operand_type_reg, x64_reg_rsp_ix, 0, 0, 0, "");
+
+    asm_insn->insn_operands[1] = x64_ASM_Instruction_Operand
      (x64_operand_type_immediate, 0, 0, curr_func_total_stack_allocated, 0, "");
 
     x64_ASM_instructions_dir->emplace_back(0, 0, 0, 0, arena_offset);
