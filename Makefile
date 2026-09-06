@@ -1,4 +1,4 @@
-.PHONY: lexer
+.PHONY: main
 
 CXXFLAGS += -D_GNU_SOURCE
 CXXFLAGS += -Wall
@@ -34,6 +34,6 @@ ARCH_FLAGS = -march=native
 SRC = src/compiler-driver/compiler-hirola.cpp
 BIN = bin/compiler-driver/compiler-hirola
 
-lexer:
+main:
 	$(CXX) $(SRC) -o $(BIN) \
-    $(CXXFLAGS) $(CXX_STD) $(ARCH_FLAGS) $(OPTIMIZATION_LEVEL)
+	$(CXXFLAGS) $(CXX_STD) $(ARCH_FLAGS) $(OPTIMIZATION_LEVEL)

@@ -13,6 +13,7 @@
 #include <cerrno>
 #include <unordered_map>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "../auxilliary-header-files/compiler-constants.hpp"
 
@@ -26,6 +27,9 @@
 #include "../compiler-phases/front-end/parser.hpp"
 #include "../compiler-phases/middle-end/ir-instructions.hpp"
 #include "../compiler-phases/middle-end/ir-generator.hpp"
+#include "../compiler-phases/back-end/x86_64/machine-description/x64-basic-machine-description.hpp"
+#include "../compiler-phases/back-end/x86_64/instruction-selection/x64-basic-instruction-selector.hpp"
+
 
 void grab_source_code_string(char* source_file_name, std::string& target_str)
 {
@@ -169,17 +173,22 @@ int main(int argc, char* argv[])
         std::cout << "\n";
     }
     std::cout << "\n";
+
     IR_Generation_Orchestrator my_ir_generation_orchestrator
         (std::move(my_parsing_orchestrator.ast_arena),
          std::move(my_parsing_orchestrator.statement_dir),
          std::move(my_parsing_orchestrator.parsing_quotas));
+
     my_ir_generation_orchestrator.spawn_IR_generator
         (my_ir_generation_orchestrator.IR_generation_quotas[0]);
+
     entries = my_ir_generation_orchestrator.IR_instructions_dir.size();
     IR_Instructions_Directory_Entry* entry;
     size_t which_ir_insn;
+
     uint8_t* arena =
         my_ir_generation_orchestrator.IR_instructions_arena.arena_ptr;
+
     ir_insn_equate* insn_equ = nullptr;
     ir_insn_add*    insn_add = nullptr;
     ir_insn_sub*    insn_sub = nullptr;
@@ -216,6 +225,33 @@ int main(int argc, char* argv[])
             insn_div = (ir_insn_div*)(arena + arena_offset);
             insn_div->print_ir_insn();
         }
+    }
+
+    ASM_Code_Generation_Orchestrator_x64 asm_codegen_orchestrator_x64
+        (std::move(my_ir_generation_orchestrator.IR_instructions_arena),
+         std::move(my_ir_generation_orchestrator.IR_instructions_dir),
+         std::move(my_ir_generation_orchestrator.IR_generation_quotas));
+
+    asm_codegen_orchestrator_x64.spawn_ASM_code_generator
+        (asm_codegen_orchestrator_x64.ASM_code_generation_quotas[0]);
+
+    x64_Assembly_Instruction* asm_insn;
+
+    entries = asm_codegen_orchestrator_x64.x64_ASM_instructions_dir.size();
+    arena   = asm_codegen_orchestrator_x64.x64_ASM_instructions_arena.arena_ptr;
+
+    printf("\nEMITTED x86_64 ASSEMBLY LANGUAGE CODE: \n\n");
+
+    for(size_t i = 0; i < entries; ++i)
+    {
+        arena_offset = asm_codegen_orchestrator_x64
+                           .x64_ASM_instructions_dir[i].asm_insn_arena_offset;
+
+        asm_insn = (x64_Assembly_Instruction*)
+                      (asm_codegen_orchestrator_x64
+                          .x64_ASM_instructions_arena.arena_ptr + arena_offset);
+
+        asm_insn->emit_asm_code(STDOUT_FILENO);
     }
 
     return 0;

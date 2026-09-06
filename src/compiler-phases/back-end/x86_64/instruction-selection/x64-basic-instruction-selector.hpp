@@ -28,7 +28,7 @@ public:
     std::vector<std::vector<size_t>> ASM_code_generation_quotas;
 
     /* Constructor. */
-    explicit ASM_Generation_Orchestrator
+    explicit ASM_Code_Generation_Orchestrator_x64
         (MEM_Arena&& IR_instructions_arena_in,
          IR_Instructions_Directory&& IR_instructions_dir_in,
          std::vector<std::vector<size_t>> ASM_code_generation_quotas_in)
@@ -37,7 +37,7 @@ public:
       x64_ASM_instructions_arena
         (MEM_Arena(std::string("x64 ASM Instructions Arena"))),
       x64_ASM_instructions_dir(ASM_Instructions_Directory(0, 0)),
-      ASM_generation_quotas(std::move(ASM_code_generation_quotas_in)) {}
+      ASM_code_generation_quotas(std::move(ASM_code_generation_quotas_in)) {}
 
     uint8_t spawn_ASM_code_generator(std::vector<size_t> ASM_code_gen_quota);
 };
@@ -48,7 +48,7 @@ private:
     /* Receives these from an ASM Code Generation Orchestrator: */
     MEM_Arena* IR_instructions_arena;
     IR_Instructions_Directory* IR_instructions_dir;
-    MEM_Areena* x64_ASM_instructions_arena;
+    MEM_Arena* x64_ASM_instructions_arena;
     ASM_Instructions_Directory* x64_ASM_instructions_dir;
     std::vector<size_t> ASM_code_gen_quota;
 
@@ -64,9 +64,9 @@ public:
          MEM_Arena* x64_insn_arena_in, ASM_Instructions_Directory* asm_dir_in,
          std::vector<size_t> ASM_code_gen_quota_in)
     : IR_instructions_arena(IR_insn_arena_in), IR_instructions_dir(ir_dir_in),
-      x64_ASM_instructions_arena(asm_insn_arena_in),
+      x64_ASM_instructions_arena(x64_insn_arena_in),
       x64_ASM_instructions_dir(asm_dir_in),
-      ASM_code_gen_quota(ASM_code_gen_quota_in) {}
+      ASM_code_gen_quota(ASM_code_gen_quota_in){}
 
     uint8_t generate_ASM_code(void);
 
@@ -82,6 +82,27 @@ private:
     inline void emit_asm_for_div_u64(size_t IR_dir_entry);
 };
 
+uint8_t ASM_Code_Generation_Orchestrator_x64::spawn_ASM_code_generator
+                                      (std::vector<size_t> asm_generation_quota)
+{
+    size_t ret = 0;
+
+    ASM_Code_Generator_x64 asm_generator = ASM_Code_Generator_x64
+        (&(this->IR_instructions_arena),      &(this->IR_instructions_dir),
+         &(this->x64_ASM_instructions_arena), &(this->x64_ASM_instructions_dir),
+         asm_generation_quota);
+
+    ret = asm_generator.generate_ASM_code();
+    if(ret) [[unlikely]] { return ret; }
+
+    std::cout << "\n****  x86_64 Assembly code generation finished!!  ****\n\n";
+    std::cout << "ASM Instructions emitted: "
+              << this->x64_ASM_instructions_dir.size() << "\n";
+    std::cout << "ASM Arena bytes used: "
+              << this->x64_ASM_instructions_arena.wr_offset << "\n";
+    return ret;
+}
+
 /* TODO: This only works because we still have only A SINGLE CODE BLOCK in the
  *       language. It will need to be called per Code Block in the function
  *       generate_ASM_code, when it finds the beginning of a Code Block of type
@@ -92,7 +113,8 @@ void ASM_Code_Generator_x64::setup_new_stack_frame(void)
     size_t   IR_insn_type;
     size_t   IR_insn_arena_offset;
     uint8_t* IR_insn_addr;
-    std::unordered_map<std::string, size_t>::iterator it;
+
+    curr_func_total_stack_allocated = 0;
 
     /* Each IR instruction kind that assigns to a new IR variable. */
     union
@@ -113,7 +135,7 @@ void ASM_Code_Generator_x64::setup_new_stack_frame(void)
     for(size_t i = 0; i < IR_instructions_dir->size(); ++i)
     {
         IR_insn_type = (*IR_instructions_dir)[i].which_ir_instruction;
-        IR_insn_arean_offset = (*IR_instructions_dir)[i].ir_insn_arena_offset;
+        IR_insn_arena_offset = (*IR_instructions_dir)[i].ir_insn_arena_offset;
         IR_insn_addr = IR_instructions_arena->arena_ptr + IR_insn_arena_offset;
 
         if(   IR_insn_type == IR_INSN_EQUATE || IR_insn_type == IR_INSN_ADD
@@ -122,8 +144,13 @@ void ASM_Code_Generator_x64::setup_new_stack_frame(void)
         {
             curr_func_total_stack_allocated += 8;
 
-            for(it: IR_vars_stack_offsets)
+            std::cout << "Stack allocator: i = " << i << "\n";
+
+            for(auto& it: IR_vars_stack_offsets)
+            {
                 it.second += 8;
+                std:: cout << "Add 8: " << it.first << " " << it.second << "\n";
+            }
 
             if(IR_insn_type == IR_INSN_EQUATE)
             {
@@ -161,9 +188,9 @@ void ASM_Code_Generator_x64::setup_new_stack_frame(void)
  */
 uint8_t ASM_Code_Generator_x64::generate_ASM_code(void)
 {
-    size_t  code_block_ix;
     size_t  i;
     size_t  j;
+    size_t  k;
     size_t  arena_offset;
     uint8_t ret = 0;
     x64_Assembly_Instruction* asm_insn;
@@ -223,11 +250,13 @@ uint8_t ASM_Code_Generator_x64::generate_ASM_code(void)
             std::abort();
         }
 
+        k = 0;
+
         /* Found the 1st IR Instruction of the i-th Code Block: IR_Dir[j] */
-        while(j != IR_instructions_dir->size() && j == ASM_code_gen_quota[i])
+        while(k != IR_instructions_dir->size() && j == ASM_code_gen_quota[i])
         {
             /* Analyze the IR Instruction and emit assembly code for it. */
-            match_IR_instruction_with_ASM_code_pattern(j++);
+            match_IR_instruction_with_ASM_code_pattern(k++);
         }
     }
     return ret;
@@ -271,8 +300,8 @@ void ASM_Code_Generator_x64::match_IR_instruction_with_ASM_code_pattern
     }
     default:
     {
-        std::cout << "\n\n*** [ERR] Internal Compiler Error ***\n\n
-        x64 assembly code generation: Unknown IR instruction type index: "
+        std::cout << "\n\n*** [ERR] Internal Compiler Error ***\n\n"
+        "x64 assembly code generation: Unknown IR instruction type index: "
         << insn_type << "\nKnown IR instruction types go from 0 to "
         << TOTAL_IR_INSN_TYPES - 1 << "\n\n";
         std::abort();
@@ -317,7 +346,7 @@ void ASM_Code_Generator_x64::emit_asm_for_equ_u64(size_t IR_dir_entry)
      */
 
     /* RHS is a u64 Literal => Pattern 0 */
-    if(is_digit(equ_rhs_string[0]))
+    if(isdigit(equ_rhs_string[0]))
     {
         /* Emit assembly instruction 1 for IR code pattern 0 */
         arena_offset = x64_ASM_instructions_arena->add_entry
@@ -399,7 +428,7 @@ void ASM_Code_Generator_x64::emit_asm_for_add_u64(size_t IR_dir_entry)
 
     arena_offset = (*IR_instructions_dir)[IR_dir_entry].ir_insn_arena_offset;
     IR_insn = (ir_insn_add*)(IR_instructions_arena->arena_ptr + arena_offset);
-    add_target_string = IR_insn->target
+    add_target_string = IR_insn->target;
     add_rhs_string    = IR_insn->rhs_operand;
     add_lhs_string    = IR_insn->lhs_operand;
 
@@ -499,7 +528,7 @@ void ASM_Code_Generator_x64::emit_asm_for_sub_u64(size_t IR_dir_entry)
 
     arena_offset = (*IR_instructions_dir)[IR_dir_entry].ir_insn_arena_offset;
     IR_insn = (ir_insn_add*)(IR_instructions_arena->arena_ptr + arena_offset);
-    sub_target_string = IR_insn->target
+    sub_target_string = IR_insn->target;
     sub_rhs_string    = IR_insn->rhs_operand;
     sub_lhs_string    = IR_insn->lhs_operand;
 
@@ -603,7 +632,7 @@ void ASM_Code_Generator_x64::emit_asm_for_mul_u64(size_t IR_dir_entry)
 
     arena_offset = (*IR_instructions_dir)[IR_dir_entry].ir_insn_arena_offset;
     IR_insn = (ir_insn_add*)(IR_instructions_arena->arena_ptr + arena_offset);
-    mul_target_string = IR_insn->target
+    mul_target_string = IR_insn->target;
     mul_rhs_string    = IR_insn->rhs_operand;
     mul_lhs_string    = IR_insn->lhs_operand;
 
@@ -709,7 +738,7 @@ void ASM_Code_Generator_x64::emit_asm_for_div_u64(size_t IR_dir_entry)
 
     arena_offset = (*IR_instructions_dir)[IR_dir_entry].ir_insn_arena_offset;
     IR_insn = (ir_insn_add*)(IR_instructions_arena->arena_ptr + arena_offset);
-    div_target_string = IR_insn->target
+    div_target_string = IR_insn->target;
     div_rhs_string    = IR_insn->rhs_operand;
     div_lhs_string    = IR_insn->lhs_operand;
 

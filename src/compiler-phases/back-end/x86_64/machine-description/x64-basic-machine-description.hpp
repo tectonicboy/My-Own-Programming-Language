@@ -133,6 +133,127 @@ lookup_table_x64_reg_names =
 
 /*----------------------------------------------------------------------------*/
 
+/* Named x64 instruction operand kinds. */
+constexpr size_t x64_operand_type_immediate                 = 0;
+constexpr size_t x64_operand_type_reg                       = 1;
+constexpr size_t x64_operand_type_reg_as_ptr                = 2;
+constexpr size_t x64_operand_type_reg_plus_immediate_as_ptr = 3;
+constexpr size_t x64_operand_type_complex_array_elem_access = 4;
+constexpr size_t x64_operand_type_label                     = 5;
+
+/* Generic x86_64 assembly instruction operand class.
+ *
+ * For simplicity and codebase compactness, it contains the maximum number of
+ * parts that make up an x64 instruction operand, regardless of how many parts
+ * a particular operand represented by this class actually has, instead of
+ * having separate classes for operands that have a different number of parts to
+ * them and a base class for what's common among them.
+ *
+ * emit_asm_code() emits Intel-syntax assembly code of this operand.
+ */
+
+class x64_ASM_Instruction_Operand
+{
+public:
+    size_t operand_type;
+    size_t operand_reg1_ix;
+    size_t operand_reg2_ix;
+    size_t operand_immediate1_val;
+    size_t operand_immediate2_val;
+    std::string_view operand_label;
+
+    /* Default constructor. Used when first spawning an ASM Instruction object
+     *                      which has each operand object separately specified.
+     */
+    x64_ASM_Instruction_Operand()
+    : operand_type(0), operand_reg1_ix(0), operand_reg2_ix(0),
+      operand_immediate1_val(0), operand_immediate2_val(0), operand_label(""){};
+
+    /* Regular constructor. */
+    explicit x64_ASM_Instruction_Operand
+        (size_t type_in, size_t reg1_ix_in, size_t reg2_ix_in,
+         size_t immediate1_val_in, size_t immediate2_val_in, std::string str_in)
+    : operand_type(type_in), operand_reg1_ix(reg1_ix_in),
+      operand_reg2_ix(reg2_ix_in), operand_immediate1_val(immediate1_val_in),
+      operand_immediate2_val(immediate2_val_in), operand_label(str_in) {}
+
+    void emit_asm_code(int output_fd) const
+    {
+        constexpr size_t temp_string_buf_size = 32;
+        uint8_t immediate_as_string[temp_string_buf_size];
+
+        switch(operand_type)
+        {
+        case x64_operand_type_immediate:
+        {
+            memset(immediate_as_string, 0x00, temp_string_buf_size);
+            sprintf((char*)immediate_as_string, "%lu", operand_immediate1_val);
+            write(output_fd, immediate_as_string,
+                  strlen((const char*)immediate_as_string));
+            break;
+        }
+        case x64_operand_type_reg:
+        {
+            write(output_fd, lookup_table_x64_reg_names[operand_reg1_ix],
+                  strlen(lookup_table_x64_reg_names[operand_reg1_ix]));
+            break;
+        }
+        case x64_operand_type_reg_as_ptr:
+        {
+            write(output_fd, "[", 1);
+            write(output_fd, lookup_table_x64_reg_names[operand_reg1_ix],
+                  strlen(lookup_table_x64_reg_names[operand_reg1_ix]));
+            write(output_fd, "]", 1);
+            break;
+        }
+        case x64_operand_type_reg_plus_immediate_as_ptr:
+        {
+            write(output_fd, "[", 1);
+            write(output_fd, lookup_table_x64_reg_names[operand_reg1_ix],
+                  strlen(lookup_table_x64_reg_names[operand_reg1_ix]));
+            write(output_fd, " + ", 3);
+            sprintf((char*)immediate_as_string, "%lu", operand_immediate1_val);
+            write(output_fd, immediate_as_string,
+                  strlen((const char*)immediate_as_string));
+            write(output_fd, "]", 1);
+            break;
+        }
+        case x64_operand_type_complex_array_elem_access:
+        {
+            write(output_fd, "[", 1);
+            write(output_fd, lookup_table_x64_reg_names[operand_reg1_ix],
+                  strlen(lookup_table_x64_reg_names[operand_reg1_ix]));
+            write(output_fd, " * ", 3);
+            write(output_fd, lookup_table_x64_reg_names[operand_reg2_ix],
+                  strlen(lookup_table_x64_reg_names[operand_reg2_ix]));
+            write(output_fd, " + ", 3);
+            sprintf((char*)immediate_as_string, "%lu", operand_immediate1_val);
+            write(output_fd, immediate_as_string,
+                  strlen((const char*)immediate_as_string));
+            write(output_fd, " + ", 3);
+            sprintf((char*)immediate_as_string, "%lu", operand_immediate2_val);
+            write(output_fd, immediate_as_string,
+                  strlen((const char*)immediate_as_string));
+            write(output_fd, "]", 1);
+            break;
+        }
+        case x64_operand_type_label:
+        {
+            write(output_fd, operand_label.data(), operand_label.size());
+            break;
+        }
+        default:
+        {
+            break;
+        } /* end last case. */
+        } /* end switch.    */
+    }
+};
+
+/*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*/
+
 /* Generic x86_64 assembly instruction class.
  *
  * For simplicity and codebase compactness, it contains the maximum number of
@@ -187,7 +308,7 @@ public:
         /* The instruction operands. */
         for(size_t i = 0; i < insn_operand_arity; ++i)
         {
-            insn_operands[i].emit_asm_code();
+            insn_operands[i].emit_asm_code(output_fd);
 
             if(i != insn_operand_arity - 1)
                 write(output_fd, ", ", 2);
@@ -195,115 +316,6 @@ public:
 
         /* Instruction assembly code has been emitted. Go on a new line. */
         write(output_fd, "\n", 1);
-    }
-};
-
-/*----------------------------------------------------------------------------*/
-
-/* Named x64 instruction operand kinds. */
-constexpr size_t x64_operand_type_immediate                 = 0;
-constexpr size_t x64_operand_type_reg                       = 1;
-constexpr size_t x64_operand_type_reg_as_ptr                = 2;
-constexpr size_t x64_operand_type_reg_plus_immediate_as_ptr = 3;
-constexpr size_t x64_operand_type_complex_array_elem_access = 4;
-constexpr size_t x64_operand_type_label                     = 5;
-
-/* Generic x86_64 assembly instruction operand class.
- *
- * For simplicity and codebase compactness, it contains the maximum number of
- * parts that make up an x64 instruction operand, regardless of how many parts
- * a particular operand represented by this class actually has, instead of
- * having separate classes for operands that have a different number of parts to
- * them and a base class for what's common among them.
- *
- * emit_asm_code() emits Intel-syntax assembly code of this operand.
- */
-
-class x64_ASM_Instruction_Operand
-{
-public:
-    size_t operand_type;
-    size_t operand_reg1_ix;
-    size_t operand_reg2_ix;
-    size_t operand_immediate1_val;
-    size_t operand_immediate2_val;
-    std::string_view operand_label;
-
-    /* Constructor. */
-    explicit x64_ASM_Instruction_Operand
-        (size_t type_in, size_t reg1_ix_in, size_t reg2_ix_in,
-         size_t immediate1_val_in, size_t immediate2_val_in, std::string str_in)
-    : operand_type(type_in), operand_reg1_ix(reg1_ix_in),
-      operand_reg2_ix(reg2_ix_in), operand_immediate1_val(immediate1_val_in),
-      operand_immediate2_val(immediate2_val_in), operand_label(str_in) {}
-
-    void emit_asm_code(int output_fd) const
-    {
-        constexpr size_t temp_string_buf_size = 32;
-        uint8_t immediate_as_string[temp_string_buf_size];
-
-        switch(operand_type)
-        {
-        case x64_operand_type_immediate:
-        {
-            memset(immediate_as_string, 0x00, temp_string_buf_size);
-            sprintf(immediate_as_string, "%lu", operand_immediate1_val);
-            write(output_fd, immediate_as_string, strlen(immediate_as_string));
-            break;
-        }
-        case x64_operand_type_reg:
-        {
-            write(output_fd, lookup_table_x64_reg_names[operand_reg1_ix],
-                  strlen(lookup_table_x64_reg_names[operand_reg1_ix]));
-            break;
-        }
-        case x64_operand_type_reg_as_ptr:
-        {
-            write(output_fd, "[", 1);
-            write(output_fd, lookup_table_x64_reg_names[operand_reg1_ix],
-                  strlen(lookup_table_x64_reg_names[operand_reg1_ix]));
-            write(output_fd, "]", 1);
-            break;
-        }
-        case x64_operand_type_reg_plus_immediate_as_ptr:
-        {
-            write(output_fd, "[", 1);
-            write(output_fd, lookup_table_x64_reg_names[operand_reg1_ix],
-                  strlen(lookup_table_x64_reg_names[operand_reg1_ix]));
-            write(output_fd, " + ", 3);
-            sprintf(immediate_as_string, "%lu", operand_immediate1_val);
-            write(output_fd, immediate_as_string, strlen(immediate_as_string));
-            write(output_fd, "]", 1);
-            break;
-        }
-        case x64_operand_type_complex_array_elem_access:
-        {
-            write(output_fd, "[", 1);
-            write(output_fd, lookup_table_x64_reg_names[operand_reg1_ix],
-                  strlen(lookup_table_x64_reg_names[operand_reg1_ix]));
-            write(output_fd, " * ", 3);
-            write(output_fd, lookup_table_x64_reg_names[operand_reg2_ix],
-                  strlen(lookup_table_x64_reg_names[operand_reg2_ix]));
-            write(output_fd, " + ", 3);
-            sprintf(immediate_as_string, "%lu", operand_immediate1_val);
-            write(output_fd, immediate_as_string, strlen(immediate_as_string));
-            write(output_fd, " + ", 3);
-            sprintf(immediate_as_string, "%lu", operand_immediate2_val);
-            write(output_fd, immediate_as_string, strlen(immediate_as_string));
-            write(output_fd, "]", 1);
-            break;
-        }
-        case x64_operand_type_label:
-        {
-            write
-               (output_fd, operand_label.c_str(), strlen(operand_labe.c_str()));
-            break;
-        }
-        default:
-        {
-            break;
-        } /* end last case. */
-        } /* end switch.    */
     }
 };
 
