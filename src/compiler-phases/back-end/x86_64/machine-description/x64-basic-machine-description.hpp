@@ -137,7 +137,7 @@ lookup_table_x64_reg_names =
 constexpr size_t x64_operand_type_immediate                 = 0;
 constexpr size_t x64_operand_type_reg                       = 1;
 constexpr size_t x64_operand_type_reg_as_ptr                = 2;
-constexpr size_t x64_operand_type_reg_plus_immediate_as_ptr = 3;
+constexpr size_t x64_operand_type_reg_plus_immed_as_ptr     = 3;
 constexpr size_t x64_operand_type_complex_array_elem_access = 4;
 constexpr size_t x64_operand_type_label                     = 5;
 
@@ -206,7 +206,7 @@ public:
             write(output_fd, "]", 1);
             break;
         }
-        case x64_operand_type_reg_plus_immediate_as_ptr:
+        case x64_operand_type_reg_plus_immed_as_ptr:
         {
             write(output_fd, "[", 1);
             write(output_fd, lookup_table_x64_reg_names[operand_reg1_ix],
