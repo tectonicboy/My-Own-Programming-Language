@@ -75,19 +75,35 @@ private:
 
     inline void match_IR_instruction_with_ASM_code_pattern(size_t IR_dir_entry);
 
+    /* These emit all ASM instructions for a given IR code pattern. */
     inline void emit_asm_for_equ_u64(size_t IR_dir_entry);
     inline void emit_asm_for_add_u64(size_t IR_dir_entry);
     inline void emit_asm_for_sub_u64(size_t IR_dir_entry);
     inline void emit_asm_for_mul_u64(size_t IR_dir_entry);
     inline void emit_asm_for_div_u64(size_t IR_dir_entry);
 
-    /* Emits an instruction of the form:   mov reg, [reg + offset_immed]  */
+    /* Emits an instruction of the form:   mov reg, [reg + offset_immed]   */
     size_t emit_mov_r64_from_r64_plus_offset_as_ptr
                               (size_t reg_1_ix, size_t reg_2_ix, size_t offset);
 
-    /* Emits an instruction of the form:   mov [reg + offset_immed], reg  */
+    /* Emits an instruction of the form:   mov [reg + offset_immed], reg   */
     size_t emit_mov_r64_plus_offset_as_ptr_from_r64
                               (size_t reg_1_ix, size_t offset, size_t reg_2_ix);
+
+    /* Emits an instruction of the form:   add reg, reg   */
+    size_t x64_emit_add_reg_reg(size_t reg_1_ix, size_t reg_2_ix);
+
+    /* Emits an instruction of the form:   sub reg, immed   */
+    size_t x64_emit_sub_reg_immed(size_t reg_ix, size_t immed);
+
+    /* Emits an instruction of the form:   sub reg, reg   */
+    size_t x64_emit_sub_reg_reg(size_t reg_1_ix, size_t reg_2_ix);
+
+    /* Emits an instruction of the form:   mul reg, reg   */
+    size_t x64_emit_mul_reg_reg(size_t reg_1_ix, size_t reg_2_ix);
+
+    /* Emits an instruction of the form:   div reg   */
+    size_t x64_emit_cqo(void);
 };
 
 uint8_t ASM_Code_Generation_Orchestrator_x64::spawn_ASM_code_generator
@@ -274,7 +290,7 @@ uint8_t ASM_Code_Generator_x64::generate_ASM_code(void)
 }
 
 /* Emits an x64 ASM instruction of the form:   mov reg, [reg + offset_immed]  */
-size_t ASM_Code_Generator_x64::emit_mov_r64_from_r64_plus_offset_as_ptr
+size_t ASM_Code_Generator_x64::x64_emit_mov_r64_from_r64_plus_offset_as_ptr
                                (size_t reg_1_ix, size_t reg_2_ix, size_t offset)
 {
     size_t arena_offset = x64_ASM_instructions_arena->add_entry
@@ -291,7 +307,7 @@ size_t ASM_Code_Generator_x64::emit_mov_r64_from_r64_plus_offset_as_ptr
 }
 
 /* Emits an x64 ASM instruction of the form:   mov [reg + offset_immed], reg  */
-size_t ASM_Code_Generator_x64::emit_mov_r64_plus_offset_as_ptr_from_r64
+size_t ASM_Code_Generator_x64::x64_emit_mov_r64_plus_offset_as_ptr_from_r64
                                (size_t reg_1_ix, size_t offset, size_t reg_2_ix)
 {
     size_t arena_offset = x64_ASM_instructions_arena->add_entry
@@ -303,7 +319,22 @@ size_t ASM_Code_Generator_x64::emit_mov_r64_plus_offset_as_ptr_from_r64
            (x64_operand_type_reg_plus_immed_as_ptr, reg_1_ix, 0, offset, 0, "");
     asm_insn->insn_operands[1] = x64_ASM_Instruction_Operand
                                   (x64_operand_type_reg, reg_2_ix, 0, 0, 0, "");
+    return arena_offset;
+}
 
+/* Emits an x64 ASM instruction of the form:   add reg, reg   */
+size_t ASM_Code_Generator_x64::x64_emit_add(size_t reg_1_ix, size_t reg_2_ix)
+{
+    size_t arena_offset = x64_ASM_instructions_arena->add_entry
+                    <x64_Assembly_Instruction>(x64_insn_add_ix, 2);
+    x64_Assembly_Instruction* asm_insn = (x64_Assembly_Instruction*)
+                   (x64_ASM_instructions_arena->arena_ptr + arena_offset);
+
+    asm_insn->insn_operands[0] = x64_ASM_Instruction_Operand
+                            (x64_operand_type_reg, reg_1_ix, 0, 0, 0, "");
+
+    asm_insn->insn_operands[1] = x64_ASM_Instruction_Operand
+                            (x64_operand_type_reg, reg_2_ix, 0, 0, 0, "");
     return arena_offset;
 }
 
@@ -411,15 +442,15 @@ void ASM_Code_Generator_x64::emit_asm_for_equ_u64(size_t IR_dir_entry)
      * Emit assembly instruction 1 for IR code pattern 1
      */
     else
-        arena_offset = emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rbp_ix,
-                         x64_reg_rsp_ix, IR_vars_stack_offsets[equ_rhs_string]);
+        arena_offset = x64_emit_mov_r64_from_r64_plus_offset_as_ptr
+        (x64_reg_rbp_ix, x64_reg_rsp_ix, IR_vars_stack_offsets[equ_rhs_string]);
 
     /* Add ASM instruction 1 of pattern 0/1 to ASM Directory. */
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 0, arena_offset);
 
     /* Emit ASM instruction 2 for IR code pattern 0/1, add to ASM directory. */
-    arena_offset = emit_mov_r64_plus_offset_as_ptr_from_r64(x64_reg_rsp_ix,
+    arena_offset = x64_emit_mov_r64_plus_offset_as_ptr_from_r64(x64_reg_rsp_ix,
                        IR_vars_stack_offsets[equ_lhs_string], x64_reg_rbp_ix);
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 1, arena_offset);
@@ -454,36 +485,25 @@ void ASM_Code_Generator_x64::emit_asm_for_add_u64(size_t IR_dir_entry)
     add_lhs_string    = IR_insn->lhs_operand;
 
     /* Emit ASM instruction 1 for IR code pattern 2, add to ASM directory. */
-    arena_offset = emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rbp_ix,
-                         x64_reg_rsp_ix, IR_vars_stack_offsets[add_lhs_string]);
+    arena_offset = x64_emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rbp_ix,
+                       x64_reg_rsp_ix, IR_vars_stack_offsets[add_lhs_string]);
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 0, arena_offset);
 
     /* Emit ASM instruction 2 for IR code pattern 2, add to ASM directory. */
-    arena_offset = emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rbx_ix,
-                         x64_reg_rsp_ix, IR_vars_stack_offsets[add_rhs_string]);
+    arena_offset = x64_emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rbx_ix,
+                       x64_reg_rsp_ix, IR_vars_stack_offsets[add_rhs_string]);
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 1, arena_offset);
 
     /* Emit ASM instruction 3 for IR code pattern 2, add to ASM directory. */
-    arena_offset = x64_ASM_instructions_arena->add_entry
-                    <x64_Assembly_Instruction>(x64_insn_add_ix, 2);
-
-    asm_insn = (x64_Assembly_Instruction*)
-                   (x64_ASM_instructions_arena->arena_ptr + arena_offset);
-
-    asm_insn->insn_operands[0] = x64_ASM_Instruction_Operand
-                            (x64_operand_type_reg, x64_reg_rbp_ix, 0, 0, 0, "");
-
-    asm_insn->insn_operands[1] = x64_ASM_Instruction_Operand
-                            (x64_operand_type_reg, x64_reg_rbx_ix, 0, 0, 0, "");
-
+    arena_offset = emit_add(x64_reg_rbp_ix, x64_reg_rbx_ix);
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 2, arena_offset);
 
     /* Emit ASM instruction 4 for IR code pattern 2, add to ASM directory. */
-    arena_offset = emit_mov_r64_plus_offset_as_ptr_from_r64(x64_reg_rsp_ix,
-                      IR_vars_stack_offsets[add_target_string], x64_reg_rbp_ix);
+    arena_offset = x64_emit_mov_r64_plus_offset_as_ptr_from_r64(x64_reg_rsp_ix,
+                       IR_vars_stack_offsets[add_target_string], x64_reg_rbp_ix);
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 3, arena_offset);
     return;
@@ -517,14 +537,14 @@ void ASM_Code_Generator_x64::emit_asm_for_sub_u64(size_t IR_dir_entry)
     sub_lhs_string    = IR_insn->lhs_operand;
 
     /* Emit ASM instruction 1 for IR code pattern 3, add to ASM directory. */
-    arena_offset = emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rbp_ix,
-                         x64_reg_rsp_ix, IR_vars_stack_offsets[sub_lhs_string]);
+    arena_offset = x64_emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rbp_ix,
+                       x64_reg_rsp_ix, IR_vars_stack_offsets[sub_lhs_string]);
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 0, arena_offset);
 
     /* Emit ASM instruction 2 for IR code pattern 3, add to ASM directory. */
-    arena_offset = emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rbx_ix,
-                         x64_reg_rsp_ix, IR_vars_stack_offsets[sub_rhs_string]);
+    arena_offset = x64_emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rbx_ix,
+                       x64_reg_rsp_ix, IR_vars_stack_offsets[sub_rhs_string]);
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 1, arena_offset);
 
@@ -545,7 +565,7 @@ void ASM_Code_Generator_x64::emit_asm_for_sub_u64(size_t IR_dir_entry)
                      (code_block_ix, statement_ix, ir_insn_ix, 2, arena_offset);
 
     /* Emit ASM instruction 4 for IR code pattern 3, add to ASM directory. */
-    arena_offset = emit_mov_r64_plus_offset_as_ptr_from_r64(x64_reg_rsp_ix,
+    arena_offset = x64_emit_mov_r64_plus_offset_as_ptr_from_r64(x64_reg_rsp_ix,
                       IR_vars_stack_offsets[sub_target_string], x64_reg_rbp_ix);
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 3, arena_offset);
@@ -584,14 +604,14 @@ void ASM_Code_Generator_x64::emit_asm_for_mul_u64(size_t IR_dir_entry)
     mul_lhs_string    = IR_insn->lhs_operand;
 
     /* Emit ASM instruction 1 for IR code pattern 4, add to ASM directory. */
-    arena_offset = emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rbp_ix,
-                         x64_reg_rsp_ix, IR_vars_stack_offsets[mul_lhs_string]);
+    arena_offset = x64_emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rbp_ix,
+                       x64_reg_rsp_ix, IR_vars_stack_offsets[mul_lhs_string]);
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 0, arena_offset);
 
     /* Emit ASM instruction 2 for IR code pattern 4, add to ASM directory. */
-    arena_offset = emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rax_ix,
-                         x64_reg_rsp_ix, IR_vars_stack_offsets[mul_rhs_string]);
+    arena_offset = x64_emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rax_ix,
+                       x64_reg_rsp_ix, IR_vars_stack_offsets[mul_rhs_string]);
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 1, arena_offset);
 
@@ -612,7 +632,7 @@ void ASM_Code_Generator_x64::emit_asm_for_mul_u64(size_t IR_dir_entry)
                      (code_block_ix, statement_ix, ir_insn_ix, 2, arena_offset);
 
     /* Emit ASM instruction 4 for IR code pattern 4, add to ASM directory. */
-    arena_offset = emit_mov_r64_plus_offset_as_ptr_from_r64(x64_reg_rsp_ix,
+    arena_offset = x64_emit_mov_r64_plus_offset_as_ptr_from_r64(x64_reg_rsp_ix,
                       IR_vars_stack_offsets[mul_target_string], x64_reg_rax_ix);
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 3, arena_offset);
@@ -653,8 +673,8 @@ void ASM_Code_Generator_x64::emit_asm_for_div_u64(size_t IR_dir_entry)
     div_lhs_string    = IR_insn->lhs_operand;
 
     /* Emit assembly instruction 1 for IR code pattern 5 */
-    arena_offset = emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rax_ix,
-                         x64_reg_rsp_ix, IR_vars_stack_offsets[div_lhs_string]);
+    arena_offset = x64_emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rax_ix,
+                       x64_reg_rsp_ix, IR_vars_stack_offsets[div_lhs_string]);
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 0, arena_offset);
 
@@ -669,8 +689,8 @@ void ASM_Code_Generator_x64::emit_asm_for_div_u64(size_t IR_dir_entry)
                      (code_block_ix, statement_ix, ir_insn_ix, 1, arena_offset);
 
     /* Emit assembly instruction 3 for IR code pattern 5 */
-    arena_offset = emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rbp_ix,
-                         x64_reg_rsp_ix, IR_vars_stack_offsets[div_rhs_string]);
+    arena_offset = x64_emit_mov_r64_from_r64_plus_offset_as_ptr(x64_reg_rbp_ix,
+                       x64_reg_rsp_ix, IR_vars_stack_offsets[div_rhs_string]);
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 2, arena_offset);
 
@@ -688,7 +708,7 @@ void ASM_Code_Generator_x64::emit_asm_for_div_u64(size_t IR_dir_entry)
                      (code_block_ix, statement_ix, ir_insn_ix, 3, arena_offset);
 
     /* Emit assembly instruction 5 for IR code pattern 5 */
-    arena_offset = emit_mov_r64_plus_offset_as_ptr_from_r64(x64_reg_rsp_ix,
+    arena_offset = x64_emit_mov_r64_plus_offset_as_ptr_from_r64(x64_reg_rsp_ix,
                       IR_vars_stack_offsets[div_target_string], x64_reg_rax_ix);
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 4, arena_offset);
