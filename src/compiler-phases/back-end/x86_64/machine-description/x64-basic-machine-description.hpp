@@ -23,6 +23,15 @@
 
 /*----------------------------------------------------------------------------*/
 
+/* The machine word size.
+ *
+ * Pointers are always this size in bytes. Basic general purpose registers
+ * are this size in bytes. size_t is defined to be this size in bytes.
+ */
+constexpr size_t x64_machine_word_size_bytes = 8;
+
+/*----------------------------------------------------------------------------*/
+
 /* Lookup table with named indices of basic x64 assembly instruction names. */
 
 constexpr size_t x64_basicMD_supported_asm_insns_arity = 7;
@@ -252,8 +261,6 @@ public:
 
 /*----------------------------------------------------------------------------*/
 
-/*----------------------------------------------------------------------------*/
-
 /* Generic x86_64 assembly instruction class.
  *
  * For simplicity and codebase compactness, it contains the maximum number of
@@ -284,18 +291,6 @@ public:
     x64_Assembly_Instruction(size_t insn_name_ix_in, size_t operand_arity_in)
     : insn_name_ix(insn_name_ix_in), insn_operand_arity(operand_arity_in) {}
 
-    /* TODO: Put this comment block in documentation file, not here in code.
-     *
-     * For a real file accessed through a FILE*, grab its file descriptor
-     * using fileno(my_FILE_ptr) and pass that file descriptor to here.
-     *
-     * The reverse operation exists too. Since a FILE* lets you do useful
-     * things like fgets(), fprintf(), etc, you can take an existing file
-     * descriptor and wrap it in a FILE* using fdopen(int fd, const char *mode).
-     *
-     * Low-latency code tends to stay away from FILE* and work on fd's directly,
-     * using read() and write().
-     */
     void emit_asm_code(int output_fd) const
     {
         /* The instruction mnemonic. */
@@ -401,10 +396,3 @@ x64_caller_saves_regs =
  * be divisible by 8.
  */
 constexpr size_t x64_stack_pointer_reg_alignment_req_before_call = 16;
-
-/* The machine word size.
- *
- * Pointers are always this size in bytes. Basic general purpose registers
- * are this size in bytes. size_t is defined to be this size in bytes.
- */
-constexpr size_t x64_machine_word_size_bytes = 8;
