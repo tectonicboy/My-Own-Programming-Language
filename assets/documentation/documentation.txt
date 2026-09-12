@@ -1,43 +1,81 @@
 ################################################################################
 ################################################################################
 
+*************************************
+*                                   *
+*  MAIN PROJECT DOCUMENTATION FILE  *
+*                                   *
+*************************************
+
+
 OVERVIEW OF THE DOCUMENTATION
 =============================
 
 All essential information about the Hirola language compiler, the project
-itself, the directory and file structure and their contents are found here.
+itself, the directory and file structure and their contents is found here.
 
 This document is divided into 4 main chapters describing, respectively, the
 compiler's three primary subsystems: front end, middle end and back end, as well
 as a chapter dedicated to the custom C++ data structures implemented to be used
 throughout the compiler's implementation.
 
-A separate document describes various optimizations and contains writeups of
-CPU microarchitecture-aware performance analyses conducted on the compiler.
+A separate document describes various optimizations that speed up compilation
+and contains writeups of CPU microarchitecture-aware performance analyses
+conducted on the compiler's codebase itself.
 
+LINES OF CODE and LINES OF DOCUMENTATION
+========================================
+
+Updated: 12 September 2026
+
+Total lines of code, manually written by me: 3795
+                                             ----
+Total lines of documentation, manually written by me: 1373
+                                                      ----
+LINES OF CODE:
+--------------
+Compiler front-end:      1458 lines of code.
+Compiler middle-end:     1011 lines of code.
+Compiler back-end:       1204 lines of code.
+Special data structures: 122  lines of code.
+
+LINES OF DOCS:
+--------------
+274 lines documenting: Project coding style guidelines.
+849 lines documenting: Main project documentation file.
+250 lines documenting: C++ optimizations that boost the compiler's performance.
 
 TABLE OF CONTENTS
 =================
 
-Documentation overview...............................................
-Table of contents....................................................
+Documentation overview...................................................
+LINES OF CODE and LINES OF DOCUMENTATION.................................
+Table of contents........................................................
 
-CHAPTER I: Hirola Compiler Front End.................................
-1.  Front End overview...............................................
-2.  Lexer............................................................
-3.  Parser...........................................................
-4.  Semantic analysis & error reporting..............................
-5.  Source file contents summary for the Front End...................
+CHAPTER I: Hirola Compiler Front End.....................................
+1.  Front End overview...................................................
+2.  Lexer................................................................
+3.  Parser...............................................................
+4.  Semantic analysis & error reporting..................................
+5.  Source file contents summary for the compiler Front End..............
 
-CHAPTER II: Hirola Compiler Middle End...............................
-6.  SSA IR code and how it's generated from the AST as input.........
+CHAPTER II: Hirola Compiler Middle End...................................
+6.  SSA IR code and how it's generated from the AST as input.............
+7.  Example of a piece of emitted SSA IR code............................
+8.  Source file contents summary for the compiler Middle End.............
 
-Chapter III: Hirola Compiler Back End................................
-7.  EMPTY FOR NOW....................................................
+Chapter III: Hirola Compiler Back End....................................
+9.  Back End overview....................................................
+10. Current compiler back-end implementation.............................
+11. x86_64 Instruction Selection.........................................
+12. x86_64 Basic Machine Description.....................................
+13. System V AMD64 ABI conventions implemented...........................
+14. Source file contents summary for the compiler Back End...............
 
-Chapter IV: Custom data structures implemented for the compiler......
-8. Overview of the special data structures...........................
-9. Custom Memory Arena...............................................
+Chapter IV: Custom data structures implemented for the compiler..........
+15. Overview of the special data structures..............................
+16. Custom Memory Arena..................................................
+17. Source file contents summary for the Custom Data Structures..........
 
 ################################################################################
 ################################################################################
@@ -165,8 +203,8 @@ and semicolons, plus basic semantic errors, like a read before initialization.
 
 A fully fledged semantic analysis pass doesn't exist, but likely will later on.
 
-5.  Source file contents summary for the Front End
-==================================================
+5.  Source file contents summary for the compiler Front End
+===========================================================
 
 src/compiler-phases/frontend/
 
@@ -234,11 +272,11 @@ src/compiler-data-structures/
     ============================================================================
     ============================================================================
 
-*********************************************
-*                                           *
-*  Compiler Front-End lines of code: 1458   *
-*                                           *
-*********************************************
+*******************************************************************************
+*                                                                             *
+*  Compiler Front-End lines of code: 1458                                     *
+*                                                          12 September 2026  *
+*******************************************************************************
 
 ################################################################################
 ################################################################################
@@ -327,8 +365,8 @@ IR Arena bytes used: 1504
 %a_4 = %_temp_2 + %_temp_3
 -----------------------------------------------------------
 
-Source file contents summary for the Middle End
-===============================================
+Source file contents summary for the compiler Middle End
+========================================================
 
 src/compiler-phases/middle-end/
 
@@ -389,11 +427,11 @@ src/compiler-data-structures/
     ============================================================================
     ============================================================================
 
-*********************************************
-*                                           *
-*  Compiler Middle-End lines of code: 1011  *
-*                                           *
-*********************************************
+*******************************************************************************
+*                                                                             *
+*  Compiler Middle-End lines of code: 1011                                    *
+*                                                          12 September 2026  *
+*******************************************************************************
 
 ################################################################################
 ################################################################################
@@ -401,8 +439,348 @@ src/compiler-data-structures/
 Chapter III: Hirola Compiler Back End
 --------------------------------------------------------------------------------
 
-To be written when x86_64 and/or aarch64 assembly code generation and final
-executable file output operations are implemented.
+
+Quick overview
+--------------
+
+The compiler back-end transforms SSA IR code into assembly language code.
+
+The end goal is to be able to emit assembly code for both x86_64 and ARM64.
+Currently only an x86_64 backend exists and comprises of basic instruction
+selection, with no assembly code optimizations or register allocation yet.
+
+The design is to have one Basic Machine Description and multiple Special
+Machine Descriptions per instruction set architecture. The Basic one shall
+contain just enough of the ISA's instructions, registers and other elements
+specified to be able to correctly emit basic assembly language programs for that
+ISA. These assembly programs will be able to run on a vast majority of machines,
+new and old alike and won't be making use of any particular microarchitecture
+generation's specifics, such as 512-bit registers in AVX512 for example.
+
+Special Machine Descriptions will contain microarchitectural details of one
+specific CPU architecture generation that will allow for optimizations that are
+rooted in how the given source program behaves on that particular architecture.
+
+Details that may be used in such optimization passes include the number of slots
+in the micro-op cache in the CPU Frontend (both ARM and x86_64 have one), the
+reorder buffer slots, the topology of the micro-op execution ports, availability
+of assembly instructions for manual prefetching of data into data caches,
+instruction latencies, SIMD vector register availability and more.
+
+Instruction selection, register allocation, assembly code optimization passes,
+instruction scheduling are all compiler phases will shall live in the back-end.
+
+
+Current compiler back-end implementation
+----------------------------------------
+
+So far, the compiler supports one backend - x86_64. It has a basic machine
+description for this ISA and no special machine descriptions yet. It has one
+basic instruction selection phase that simply spills on the stack every
+intermediate result and doesn't attempt to optimize the emitted assembly code.
+
+The instruction selection phase works by looking at each IR instruction that
+was emitted in the compiler middle-end and looks at a predefined set of patterns
+that match a given IR instruction with exactly one assembly code pattern. Later
+on, it's likely that one IR instruction or set of IR instructions will have
+multiple possible assembly code patterns to be matched with. For now, it is
+simply on a per IR instruction basis: One IR instruction -> One assembly code
+pattern, period.
+
+Stack space is preallocated at the beginning of a Code Block, since the amount
+needed is known at compile time. This is the first assembly instruction emitted
+for a given Code Block: sub rsp, <stack_bytes_needed>
+
+One assembly code optimization that is already implemented is omitting the usage
+of the RBP register in x86_64. Traditionally, this register was used as an
+anchor point that always points to the beginning of the current stack frame,
+where the RSP register points at the end of it. However, all we need in order to
+access anything on the stack frame is the RSP register itself, RBP isn't a
+mandatory piece of information. Thus, RBP is free to be used as just another
+general purpose register in the compiler backend, it is NOT used for stack
+frame management.
+
+A general purpose C++ class was written to represent any assembly instruction.
+This class always contains the maximum number of instruction operands,
+regardless of how many operands a particular emitted assembly instruction
+happens to need. This makes the compiler backend codebase more compact. The
+alternative is to have one class representing each different instruction in the
+ISA, or even one class to represent each form of each assembly instruction. This
+would bloat the backend codebase by a lot, so for now, we will stick with the
+one generic x64_Assembly_Instruction C++ class and simply leave empty any
+unused operand fields.
+
+That class has a member function for writing the actual assembly language code
+string for a given instruction and its operands to a file. The function takes
+a single input argument: the file descriptor to write assembly code to.
+
+Some general info regarding i/o on FILE* objects vs i/o on file descriptors:
+
+For a real file accessed through a FILE*, one can grab its file descriptor using
+fileno(my_FILE_ptr) and pass that file descriptor to the assembly code emitting
+function. The reverse operation exists too. Since a FILE* lets you do useful
+things like fgets(), fprintf(), etc, you can take an existing file descriptor
+and wrap it in a FILE* object using fdopen(int fd, const char *mode).
+Low-latency code tends to stay away from FILE* and work on file descriptors
+directly, using the read() and write() GNU/Linux system calls.
+
+Assembly instructions that have C++ code to emit them in more than one place
+across the compiler codebase get their own "factory functions", so that the
+several lines of code needed to construct the instruction object, along with
+its operand objects and the necessary compiler bookkeeping needed are replaced
+with a single function call. The ASM_Code_Generator_x64 class contains these
+as private member functions.
+
+So far only two instruction formats have a factory function:
+
+1. mov reg, [reg + offset_immed]
+2. mov [reg + offset_immed], reg
+
+The rest of the currently supported assembly instructions in the x86_64 Basic
+Machine Description have one emission site for one instruction format, so they
+are emitted on the spot without a wrapper function.
+
+Compile-time lookup tables with named indices are used for:
+
+    - Mnemonics of supported assembly instructions
+    - Names of supported architectural registers
+
+These make the C++ code prettier when selecting registers and instructions.
+
+
+x86_64 Instruction Selection
+----------------------------
+
+Instruction Selection itself is carried out when the top-level compiler driver
+spawns an Assembly Code Generation Orchestrator, which in turn spawns one or
+more Assembly Code Generators, which are each handed one job quota. A job quota
+is simply a set of code block indices giving the code blocks to emit assembly
+instructions for. The set of sets that contains all job quotas is handed to the
+Assembly Code Generation Orchestrator by the top-level compiler driver.
+
+This follows the design of the AST construction and the SSA IR code generation
+phases. When the language eventually gains the ability to have multiple Code
+Blocks, the compiler's work will be elegantly split across them - for example,
+4 threads and 8 Code Blocks, we can get each thread to emit AST Nodes, SSA IR
+code and Assembly code for 2 Code Blocks.
+
+GNU/Linux SysV ABI is the one to be followed. GNU Assembler (GAS) is the
+assembler of choice. Assembly programs can be emitted only for GNU/Linux OS.
+
+Instructions are selected via predefined pattern matching. Every single IR code
+to Assembly code pattern has its own instruction selection function.
+
+All current IR code --> Assembly code patterns:
+
+
+|-----------------------------------------------------------------------------|
+| EQUATING                                                                    |
+|-----------------------------------------------------------------------------|
+| Pattern 0:   { %const_0 = 5 }     --->   IR_Variable1 = literal_uint64      |
+|                                           ----------------------------------|
+| 1. Store the literal in register rbp.     |  mov rbp, THE_U64_LITERAL       |
+| 2. Store rbp in [rsp + stack_offset].     |  mov [rsp + stack_offset], rbp  |
+|=============================================================================|
+| Pattern 1:   { %a_1 = %const_0 }  --->   IR_Variable_1 = IR_Variable_2.     |
+|                                           ----------------------------------|
+| 1. Store var_2 in rbp from stack offset.  |  mov rbp, [rsp + offset2]       |
+| 2. Store register rbp in its stack slot.  |  mov [rsp + offset1], rbp       |
+|-----------------------------------------------------------------------------|
+
+
+|-----------------------------------------------------------------------------|
+| ADDITION                                                                    |
+|-----------------------------------------------------------------------------|
+| Pattern 2:   { %c_3 = %a_2 + %const_0 } --->  IR_var1 = IR_var2 + IR_var3.  |
+|                                               ------------------------------|
+| 1. Store var2 in rbp from its stack offset.   |  mov rbp, [rsp + offset2]   |
+| 2. Store var3 in rbx from its stack offset.   |  mov rbx, [rsp + offset3]   |
+| 3. Add rbx into rbp.                          |  add rbp, rbx               |
+| 4. Store register rbp in var1's stack offset. |  mov [rsp + offset1], rbp   |
+|-----------------------------------------------------------------------------|
+
+
+|----------------------------------------------------------------------------|
+| SUBTRACTION                                                                |
+|----------------------------------------------------------------------------|
+| Pattern 3:   { %_temp_1 = %a_2 - %a_3 }  --->  IR_var1 = IR_var2 - IR_var3 |
+|                                               -----------------------------|
+| 1. Store var2 in rbp from its stack offset.   |  mov rbp, [rsp + offset2]  |
+| 2. Store var3 in rbx from its stack offset.   |  mov rbx, [rsp + offset3]  |
+| 3. Subtract rbx from rbp, put result in rbp.  |  sub rbp, rbx              |
+| 4. Store register rbp in var1's stack offset. |  mov [rsp + offset1], rbp  |
+|----------------------------------------------------------------------------|
+
+
+|----------------------------------------------------------------------------|
+| MULTIPLICATION                                                             |
+|----------------------------------------------------------------------------|
+| Pattern 4:   { %_temp_1 = %a_2 * %a_3 }  --->  IR_var1 = IR_var2 * IR_var3 |
+|                                               -----------------------------|
+| 1. Store var2 in rbp from its stack offset.   |  mov rbp, [rsp + offset2]  |
+| 2. Store var3 in rax from its stack offset.   |  mov rax, [rsp + offset3]  |
+| 3. Multiply. RAX * Operand2 = RDX:RAX <-- low |  mul rax, rbp              |
+| 4. Store register rax in var1's stack offset. |  mov [rsp + offset1], rax  |
+|----------------------------------------------------------------------------|
+| NOTE: This is UNSIGNED multiplication. If the result needs to use more     |
+|       than 64 bits, the higher bits go to RDX and the overflowed low bits  |
+|       are in RAX. The first operand is always RAX, second one - we pick.   |
+|----------------------------------------------------------------------------|
+
+
+|----------------------------------------------------------------------------|
+| DIVISION                                                                   |
+|----------------------------------------------------------------------------|
+| Pattern 5:   { %_temp_1 = %a_2 / %a_3 }  --->  IR_var1 = IR_var2 / IR_var3 |
+|                                                ----------------------------|
+| 1. Store var2 in RAX from its stack offset.    | mov rax, [rsp + offset2]  |
+| 2. Sign-extend RAX into RDX to run division.   | cqo                       |
+| 3. Store var3 in rbp from its stack offset.    | mov rbp, [rsp + offset3]  |
+| 4. Divide RDX:RAX / Operand2 = RDX:RAX <-- low | div rbp                   |
+| 5. Store register rax in var1's stack offset.  | mov [rsp + offset1], rax  |
+|----------------------------------------------------------------------------|
+| NOTE: This is UNSIGNED division. The quotient goes in RAX, the remainder   |
+|       goes in RDX, which is why we sign-extend RAX into RDX beforehand.    |
+|       What we divide is in RAX. What we divide by is in a register or a    |
+|       memory location of our choosing.                                     |
+|----------------------------------------------------------------------------|
+
+
+x86_64 Basic Machine Description
+--------------------------------
+
+1. Supported instructions: 7
+
+mov, add, sub, mul, div, cqo, syscall
+
+2. Supported registers: 32
+
+    - rax, rbx, rcx, rdx
+    - r8 to r15
+    - rdi, rsi
+    - rsp, rbp
+    - xmm0 to xmm15
+
+3. Machine Word Size = 8 bytes
+
+4. Maximum number of operands per instruction: 4
+
+5. Instruction operand formats: 6
+
+    - x64_operand_type_immediate
+    - x64_operand_type_reg
+    - x64_operand_type_reg_as_ptr
+    - x64_operand_type_reg_plus_immed_as_ptr
+    - x64_operand_type_complex_array_elem_access
+    - x64_operand_type_label
+
+
+System V AMD64 ABI conventions implemented
+------------------------------------------
+
+1. First 6 INTEGER function arguments are passed in: rdi, rsi, rdx, rcx, r8, r9
+2. First 8 FLOAT   function arguments are passed in: xmm0 - xmm7
+
+3. Functions return an integer in RAX.
+4. Functions return a floating point value in XMM0.
+
+5. Functions returning a struct shall be given a pointer to a pre-allocated by
+   the CALLER memory area in rdi. The callee that's actually returning a struct
+   shall use the pointer in rdi to write out the struct itself to memory when
+   returning it. Lastly, the callee places the same pointer in rax before RET.
+
+6. Six callee-saved registers: rbx, rbp, r12, r13, r14, r15
+7. Caller-saved registers: All the rest.
+
+8. Stack pointer register RSP alignment requirement: 16 bytes
+
+   The RSP register must be divisible by 16 before a CALL instruction runs.
+   If it's not, emit a {sub rsp, N} instruction.
+
+   IMPORTANT: The OS gives us a guarantee that RSP will be aligned to 16 bytes
+              when it spawns a process out of our assembly program. We just have
+              to make sure that's still so before all emitted CALL instructions.
+
+              CALL instructions automatically push the return address on stack,
+              so RSP is divisible by 8 right after a CALL instruction runs.
+
+Source file contents summary for the compiler Back End
+======================================================
+
+src/compiler-phases/back-end/x86_64/instruction-selection
+
+    ============================================================================
+    ============================================================================
+    1) x64-basic-instruction-selector.hpp
+       ----------------------------------
+
+                    1.1) Class definition: x64 ASM code generation orchestrator
+                    1.2) Class definition: x64 ASM code generator
+
+                    1.3) Function definition: Setup a new stack frame.
+                    1.4) Function definition: Top-level ASM code generation.
+
+                    1.5) Function definitions: Factory functions for x64 ASM
+                                               instructions with multiple sites
+                                               where the compiler emits them.
+
+                    1.6) Function definition: Match IR instructions with their
+                                              respective assembly code pattern.
+
+                    1.7) Function definitions: Emit assembly instructions for
+                                               all known IR instructions. A
+                                               separate function for each IR to
+                                               Assembly code pattern match.
+
+                                            1. IR_Variable1 = literal uint64_t
+                                            2. IR_Variable1 = IR_Variable2
+                                            3. IR_var1 = IR_var2 + IR_var3
+                                            4. IR_var1 = IR_var2 - IR_var3
+                                            5. IR_var1 = IR_var2 * IR_var3
+                                            6. IR_var1 = IR_var2 / IR_var3
+
+                    LoC: 696
+    ============================================================================
+    ============================================================================
+
+src/compiler-phases/back-end/x86_64/machine-description/
+
+    ============================================================================
+    ============================================================================
+    2) x64-basic-machine-description.hpp
+       ---------------------------------
+
+                    2.1) Machine word size definition
+                    2.2) Lookup table with named indices: supported instructions
+                    2.3) Lookup table with named indices: supported registers
+                    2.4) Named constants: Supported instruction operand formats
+                    2.5) Class definition: x64_ASM_Instruction_Operand
+                    2.6) Class definition: x64_Assembly_Instruction
+                    2.7) GNU/Linux SysV AMD64 ABI rules
+
+                    LoC: 398
+    ============================================================================
+    ============================================================================
+
+src/compiler-data-structures/
+
+    ============================================================================
+    ============================================================================
+    3) back-end-structures.hpp
+       -------------------------
+
+                    3.1) Class definition: Entry in ASM Instructions Directory.
+                    3.2) Class definition: The ASM Instructions Directory.
+
+                    LoC: 110
+    ============================================================================
+    ============================================================================
+
+*******************************************************************************
+*                                                                             *
+*  Compiler Back End lines of code: 1204                                      *
+*                                                          12 September 2026  *
+*******************************************************************************
 
 ################################################################################
 ################################################################################
@@ -446,8 +824,8 @@ template type T generalized the new entry's type, and a variadic template is
 used to generalize on the arity and types of arguments given, which are to be
 passed to the constructor of the newly added arena entry.
 
-Source file contents summary for the Custom Memory Arena
-========================================================
+Source file contents summary for the Custom Data Structures
+===========================================================
 
 src/compiler-data-structures/custom-data-structures/
 
@@ -462,11 +840,11 @@ src/compiler-data-structures/custom-data-structures/
     ============================================================================
     ============================================================================
 
-**********************************************************
-*                                                        *
-*  Compiler special data structures lines of code: 122   *
-*                                                        *
-**********************************************************
+*******************************************************************************
+*                                                                             *
+*  Compiler special data structures lines of code: 122                        *
+*                                                          12 September 2026  *
+*******************************************************************************
 
 ################################################################################
 ################################################################################
