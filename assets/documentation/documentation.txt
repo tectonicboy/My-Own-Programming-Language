@@ -172,7 +172,7 @@ src/compiler-phases/frontend/
 
     ============================================================================
     ============================================================================
-    1) lexer.h      1.1) Class definition for Lexer.
+    1) lexer.hpp    1.1) Class definition for Lexer.
        -------
                     1.2) Function definitions: Processor functions used by the
                                                Lexer to process each Token type.
@@ -182,7 +182,7 @@ src/compiler-phases/frontend/
                     LoC: 352
     ============================================================================
     ============================================================================
-    2) ast.h        2.1) Counters: total number of statement & expression kinds.
+    2) ast.hpp      2.1) Counters: total number of statement & expression kinds.
        -----
                     2.2) Lookup tables and named indices into them for all
                          statement kinds and all expression kinds.
@@ -194,7 +194,7 @@ src/compiler-phases/frontend/
                     LoC: 155
     ============================================================================
     ============================================================================
-    3) parser.h     3.1) Class definitions fo ParsingOrchestrator and Parser.
+    3) parser.hpp   3.1) Class definitions fo ParsingOrchestrator and Parser.
        --------
                     3.2) Function definition: Ochestator spawning a Praser.
 
@@ -208,7 +208,7 @@ src/compiler-phases/frontend/
     ============================================================================
     ============================================================================
 
-src/compiler-data-structures/frontend/
+src/compiler-data-structures/
 
     ============================================================================
     ============================================================================
@@ -230,9 +230,15 @@ src/compiler-data-structures/frontend/
                     4.7) Class definition : An entry in the Statement Directory
                     4.8) Class definition : The Statement Directory
 
-                    LoC: 457
+                    LoC: 456
     ============================================================================
     ============================================================================
+
+*********************************************
+*                                           *
+*  Compiler Front-End lines of code: 1458   *
+*                                           *
+*********************************************
 
 ################################################################################
 ################################################################################
@@ -360,7 +366,7 @@ src/compiler-phases/middle-end/
                                                functions have decided to do so.
 
 
-                    LoC: 774
+                    LoC: 773
     ============================================================================
     ============================================================================
 
@@ -371,9 +377,23 @@ src/compiler-data-structures/
     3) middle-end-structures.hpp
        -------------------------
 
-        3.1) Lookup table with named indices of all available IR Instructions.
-        3.2) Class definition: A single entry in the IR Instructions Directory
-        3.3) Class definition: The IR Instructions Directory
+                    3.1) Lookup table with named indices of all available
+                         IR Instructions.
+
+                    3.2) Class definition: A single entry in the IR
+                         Instructions Directory
+
+                    3.3) Class definition: The IR Instructions Directory
+
+                    LoC: 132
+    ============================================================================
+    ============================================================================
+
+*********************************************
+*                                           *
+*  Compiler Middle-End lines of code: 1011  *
+*                                           *
+*********************************************
 
 ################################################################################
 ################################################################################
@@ -436,7 +456,17 @@ src/compiler-data-structures/custom-data-structures/
     1) custom-mem-arena.hpp
        --------------------
 
-                        1.1) Class definition: The custom memory arena
+                    1.1) Class definition: The custom memory arena
+
+                    LoC: 122
+    ============================================================================
+    ============================================================================
+
+**********************************************************
+*                                                        *
+*  Compiler special data structures lines of code: 122   *
+*                                                        *
+**********************************************************
 
 ################################################################################
 ################################################################################
