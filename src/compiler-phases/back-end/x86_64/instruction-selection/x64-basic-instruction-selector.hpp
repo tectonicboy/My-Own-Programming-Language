@@ -82,28 +82,20 @@ private:
     inline void emit_asm_for_mul_u64(size_t IR_dir_entry);
     inline void emit_asm_for_div_u64(size_t IR_dir_entry);
 
+    /* Assembly instructions that have code to emit them in more than one place
+     * within the compiler codebase get their own factory functions here, to
+     * improve codebase compactness and elegance.
+     *
+     * So far we have 2 such assembly instructions:
+     */
+
     /* Emits an instruction of the form:   mov reg, [reg + offset_immed]   */
-    size_t emit_mov_r64_from_r64_plus_offset_as_ptr
+    size_t x64_emit_mov_r64_from_r64_plus_offset_as_ptr
                               (size_t reg_1_ix, size_t reg_2_ix, size_t offset);
 
     /* Emits an instruction of the form:   mov [reg + offset_immed], reg   */
-    size_t emit_mov_r64_plus_offset_as_ptr_from_r64
+    size_t x64_emit_mov_r64_plus_offset_as_ptr_from_r64
                               (size_t reg_1_ix, size_t offset, size_t reg_2_ix);
-
-    /* Emits an instruction of the form:   add reg, reg   */
-    size_t x64_emit_add_reg_reg(size_t reg_1_ix, size_t reg_2_ix);
-
-    /* Emits an instruction of the form:   sub reg, immed   */
-    size_t x64_emit_sub_reg_immed(size_t reg_ix, size_t immed);
-
-    /* Emits an instruction of the form:   sub reg, reg   */
-    size_t x64_emit_sub_reg_reg(size_t reg_1_ix, size_t reg_2_ix);
-
-    /* Emits an instruction of the form:   mul reg, reg   */
-    size_t x64_emit_mul_reg_reg(size_t reg_1_ix, size_t reg_2_ix);
-
-    /* Emits an instruction of the form:   div reg   */
-    size_t x64_emit_cqo(void);
 };
 
 uint8_t ASM_Code_Generation_Orchestrator_x64::spawn_ASM_code_generator
@@ -168,13 +160,8 @@ void ASM_Code_Generator_x64::setup_new_stack_frame(void)
         {
             curr_func_total_stack_allocated += 8;
 
-            //std::cout << "Stack allocator: i = " << i << "\n";
-
             for(auto& it: IR_vars_stack_offsets)
-            {
                 it.second += 8;
-                //std:: cout << "Add 8: " << it.first << " " << it.second << "\n";
-            }
 
             if(IR_insn_type == IR_INSN_EQUATE)
             {
@@ -319,22 +306,6 @@ size_t ASM_Code_Generator_x64::x64_emit_mov_r64_plus_offset_as_ptr_from_r64
            (x64_operand_type_reg_plus_immed_as_ptr, reg_1_ix, 0, offset, 0, "");
     asm_insn->insn_operands[1] = x64_ASM_Instruction_Operand
                                   (x64_operand_type_reg, reg_2_ix, 0, 0, 0, "");
-    return arena_offset;
-}
-
-/* Emits an x64 ASM instruction of the form:   add reg, reg   */
-size_t ASM_Code_Generator_x64::x64_emit_add(size_t reg_1_ix, size_t reg_2_ix)
-{
-    size_t arena_offset = x64_ASM_instructions_arena->add_entry
-                    <x64_Assembly_Instruction>(x64_insn_add_ix, 2);
-    x64_Assembly_Instruction* asm_insn = (x64_Assembly_Instruction*)
-                   (x64_ASM_instructions_arena->arena_ptr + arena_offset);
-
-    asm_insn->insn_operands[0] = x64_ASM_Instruction_Operand
-                            (x64_operand_type_reg, reg_1_ix, 0, 0, 0, "");
-
-    asm_insn->insn_operands[1] = x64_ASM_Instruction_Operand
-                            (x64_operand_type_reg, reg_2_ix, 0, 0, 0, "");
     return arena_offset;
 }
 
@@ -497,7 +468,16 @@ void ASM_Code_Generator_x64::emit_asm_for_add_u64(size_t IR_dir_entry)
                      (code_block_ix, statement_ix, ir_insn_ix, 1, arena_offset);
 
     /* Emit ASM instruction 3 for IR code pattern 2, add to ASM directory. */
-    arena_offset = emit_add(x64_reg_rbp_ix, x64_reg_rbx_ix);
+    arena_offset = x64_ASM_instructions_arena->add_entry
+                    <x64_Assembly_Instruction>(x64_insn_add_ix, 2);
+    asm_insn = (x64_Assembly_Instruction*)
+                   (x64_ASM_instructions_arena->arena_ptr + arena_offset);
+
+    asm_insn->insn_operands[0] = x64_ASM_Instruction_Operand
+                            (x64_operand_type_reg, x64_reg_rbp_ix, 0, 0, 0, "");
+    asm_insn->insn_operands[1] = x64_ASM_Instruction_Operand
+                            (x64_operand_type_reg, x64_reg_rbx_ix, 0, 0, 0, "");
+
     x64_ASM_instructions_dir->emplace_back
                      (code_block_ix, statement_ix, ir_insn_ix, 2, arena_offset);
 

@@ -309,7 +309,6 @@ public:
         for(size_t i = 0; i < insn_operand_arity; ++i)
         {
             insn_operands[i].emit_asm_code(output_fd);
-
             if(i != insn_operand_arity - 1)
                 write(output_fd, ", ", 2);
         }
