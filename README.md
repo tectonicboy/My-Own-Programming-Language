@@ -2,6 +2,8 @@
 In this project, I'm making my own programming language and writing its compiler
 in C++ completely from scratch. I've designed the syntax and grammar, written my
 own lexing, AST construction, SSA IR code generator and assembly code generator.
+Doing the work by myself with my own two hands and brain, not using AI-generated
+code or "vibe coding", as I believe that only diminishes an engineer's skills.
 
 The primary aim of this project is to be a substantial learning experience for me
 in the topics of compiler design, C++ and assembly language programming and low-level
