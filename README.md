@@ -17,7 +17,7 @@ without initialization. Binary sub-operations must all have their own set of par
 
 Example code:  
 a = 5;  
-b = a * 100;  
+b = (a * 100);  
 var1 = ( ((a + 100) * b) - (a * 2) );  
 
 A machine description and assembly code generation is only implemented for x86_64
