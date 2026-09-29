@@ -15,10 +15,10 @@ a possibly multi-level binary operation, consisting of plus, minus, multiply or 
 The first assignment to a named variable is its declaration, there are no declarations
 without initialization. Binary sub-operations must all have their own set of parentheses.
 
-Example code:
-a = 5;
-b = a * 100;
-var1 = ((a + 100) * b) - (a * 2);
+Example code:  
+a = 5;  
+b = a * 100;  
+var1 = ((a + 100) * b) - (a * 2);  
 
 A machine description and assembly code generation is only implemented for x86_64
 right now, but it will have aarch64 assembly code generation too.
